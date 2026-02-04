@@ -678,5 +678,3 @@ if generate:
             st.warning("Hay reservas con comisión > 0 pero portal vacío. Si deben ser Booking, marca ‘Tratar portal vacío como Booking’.")
 
 st.divider()
-st.header("🔒 Conciliación bancaria deshabilitada")
-st.info("La funcionalidad de conciliación bancaria se ha eliminado de la interfaz para simplificar el uso diario. Si necesitas recuperarla, restaura el bloque eliminado en el archivo.")
