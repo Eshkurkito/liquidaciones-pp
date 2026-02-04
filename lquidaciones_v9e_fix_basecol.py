@@ -571,18 +571,22 @@ with st.sidebar:
     st.checkbox("Lectura por letras (fallback)", value=False, key="by_letters")
     st.caption("Mapeo: W, D, F, H, I, J/L (L limpia), O, AP, AR, AL.")
     st.divider()
-    st.subheader("IVA comisión por caso (Booking)")
-    col_v1, col_v2 = st.columns(2)
-    with col_v1:
-        vat_case1 = st.number_input("Caso 1 (%)", min_value=0.0, max_value=30.0, value=21.0, step=0.5)
-        vat_case3 = st.number_input("Caso 3 (%)", min_value=0.0, max_value=30.0, value=21.0, step=0.5)
-        vat_case5 = st.number_input("Caso 5 (%)", min_value=0.0, max_value=30.0, value=0.0, step=0.5)
-    with col_v2:
-        vat_case2 = st.number_input("Caso 2 (%)", min_value=0.0, max_value=30.0, value=21.0, step=0.5)
-        vat_case4 = st.number_input("Caso 4 (%)", min_value=0.0, max_value=30.0, value=0.0, step=0.5)
-        only_apolo_c2 = st.checkbox("Caso 2: aplicar solo a APOLO 029/197", value=True)
-    treat_empty_as_booking = st.checkbox("Tratar portal vacío como Booking (aplicar IVA comisión)", value=False)
-    skip_booking_vat = st.checkbox("No añadir IVA a comisión de Booking (ya viene con IVA)", value=False)
+
+    # Ajustes adicionales ocultables con "ojito"
+    with st.expander("👁️ Ajustes adicionales", expanded=False):
+        st.subheader("IVA comisión por caso (Booking)")
+        col_v1, col_v2 = st.columns(2)
+        with col_v1:
+            vat_case1 = st.number_input("Caso 1 (%)", min_value=0.0, max_value=30.0, value=21.0, step=0.5)
+            vat_case3 = st.number_input("Caso 3 (%)", min_value=0.0, max_value=30.0, value=21.0, step=0.5)
+            vat_case5 = st.number_input("Caso 5 (%)", min_value=0.0, max_value=30.0, value=0.0, step=0.5)
+        with col_v2:
+            vat_case2 = st.number_input("Caso 2 (%)", min_value=0.0, max_value=30.0, value=21.0, step=0.5)
+            vat_case4 = st.number_input("Caso 4 (%)", min_value=0.0, max_value=30.0, value=0.0, step=0.5)
+            only_apolo_c2 = st.checkbox("Caso 2: aplicar solo a APOLO 029/197", value=True)
+        treat_empty_as_booking = st.checkbox("Tratar portal vacío como Booking (aplicar IVA comisión)", value=False)
+        skip_booking_vat = st.checkbox("No añadir IVA a comisión de Booking (ya viene con IVA)", value=False)
+
     generate = st.button("Generar liquidación")
 
 file = st.file_uploader("Sube el archivo de reservas (.xlsx)", type=["xlsx"], key="reservas_upl")
