@@ -118,7 +118,7 @@ LETTER_MAP_DEFAULT = {
     "F": "Fecha salida",
     "H": "Noches ocupadas",
     "I": "Ingreso alojamiento",
-    "L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
+    "J/L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
     "O": "Total ingresos",
     "AP": "Portal",
     "AR": "Comisión portal",
@@ -556,7 +556,7 @@ def build_excel_multi(dfs_by_case: dict, filename: str):
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ========= UI: LIQUIDACIONES =========
-st.title("📊 LIQUIDACIONES (Casos 1–5)")
+st.title("📊 LIQUIDACIONES (Casos 1–5) [v9 estricto]")
 st.caption("Primero genera las liquidaciones del período. Luego sube el extracto bancario y concilia.")
 
 with st.sidebar:
@@ -589,6 +589,9 @@ with st.sidebar:
 
     generate = st.button("Generar liquidación")
 
+# Nuevo: opción para indicar que la cabecera del Excel está en la fila 2
+header_second_row = st.checkbox("La cabecera está en la segunda fila (leer desde la fila 2)", value=False)
+
 file = st.file_uploader("Sube el archivo de reservas (.xlsx)", type=["xlsx"], key="reservas_upl")
 
 # ========= Generación Liquidaciones =========
@@ -603,7 +606,8 @@ if generate:
         st.error("Sube primero el archivo de reservas (.xlsx).")
         st.stop()
 
-    df_in = pd.read_excel(file, header=0)
+    header_row = 1 if header_second_row else 0
+    df_in = pd.read_excel(file, header=header_row)
     df_in = ensure_unique_columns(df_in)
     df_norm = normalize_columns_by_letters(df_in) if st.session_state.by_letters else normalize_columns(df_in)
     df_norm = ensure_unique_columns(df_norm)
