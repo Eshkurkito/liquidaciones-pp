@@ -556,7 +556,7 @@ def build_excel_multi(dfs_by_case: dict, filename: str):
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ========= UI: LIQUIDACIONES =========
-st.title("🏦 Conciliación bancaria + 📊 LIQUIDACIONES (Casos 1–5) [v9 estricto]")
+st.title("📊 LIQUIDACIONES (Casos 1–5)")
 st.caption("Primero genera las liquidaciones del período. Luego sube el extracto bancario y concilia.")
 
 with st.sidebar:
