@@ -120,7 +120,7 @@ LETTER_MAP_DEFAULT = {
     "F": "Fecha salida",
     "H": "Noches ocupadas",
     "I": "Ingreso alojamiento",
-    "L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
+    "J/L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
     "O": "Total ingresos",
     "AP": "Portal",
     "AR": "Comisión portal",
@@ -186,7 +186,7 @@ def normalize_columns(df):
             out[c] = pd.to_datetime(out[c], errors="coerce", dayfirst=True)
 
     if "Alojamiento" in out.columns:
-        out["Alojamiento"] = out["Alojamiento"].astype(str).str.strip().str.upper()
+        out["Alojamiento"] = out["Alojamiento"].astype(str).apply(lambda v: _norm_key(v))
     if "Noches ocupadas" in out.columns:
         out["Noches ocupadas"] = pd.to_numeric(out["Noches ocupadas"], errors="coerce").fillna(0).round(0).astype(int)
 
@@ -657,6 +657,22 @@ if generate:
     header_row = 1 if header_second_row else 0
     df_in = pd.read_excel(file, header=header_row)
     df_in = ensure_unique_columns(df_in)
+
+    # --- DIAGNÓSTICO: columnas detectadas y muestra --- 
+    cols = list(df_in.columns)
+    col_map = [f"{get_column_letter(i+1)}: {repr(c)}" for i, c in enumerate(cols)]
+    st.caption("DEBUG — columnas detectadas (Letter: header_repr):")
+    st.write(col_map)
+    st.caption("DEBUG — primeras 5 filas (raw):")
+    st.dataframe(df_in.head(5))
+    # listar candidatas por texto en header
+    candidates = [c for c in cols if any(k in str(c).lower() for k in ("aloj", "nombre"))]
+    st.caption(f"DEBUG — columnas candidatas para 'Alojamiento': {candidates}")
+    for c in candidates:
+        st.write(f"Columna {repr(c)} — primeras 10 valores:")
+        st.write(df_in[c].astype(str).head(10).tolist())
+    # --- fin diagnóstico ---
+
     df_norm = normalize_columns_by_letters(df_in) if st.session_state.by_letters else normalize_columns(df_in)
     df_norm = ensure_unique_columns(df_norm)
     df_norm = normalize_liq_for_period(df_norm, start_date, end_date)
