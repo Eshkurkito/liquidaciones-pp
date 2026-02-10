@@ -135,6 +135,23 @@ def normalize_columns_by_letters(df, letter_map=LETTER_MAP_DEFAULT):
 
 def normalize_columns(df):
     out = df.copy()
+
+    def clean_money_series(ser: pd.Series) -> pd.Series:
+        s = ser.astype(str).fillna("")
+        # quitar todo menos dígitos, coma, punto y signo -
+        s = s.str.replace(r"[^\d,.\-]", "", regex=True)
+        has_dot = s.str.contains(r"\.", regex=True)
+        has_comma = s.str.contains(r",", regex=True)
+        # ambos presentes -> asumimos formato ES: '.' miles, ',' decimal -> quitar '.' y cambiar ','->'.'
+        both = has_dot & has_comma
+        s.loc[both] = s.loc[both].str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+        # solo coma -> coma decimal
+        only_comma = (~has_dot) & has_comma
+        s.loc[only_comma] = s.loc[only_comma].str.replace(",", ".", regex=False)
+        # vacíos a 0
+        s = s.replace("", "0")
+        return pd.to_numeric(s, errors="coerce").fillna(0.0)
+
     col_aloj = _first_existing(out, ["Nombre alojamiento","Alojamiento","Nombre del alojamiento","Nombre Alojamiento"])
     col_fent = _first_existing(out, ["Fecha entrada","Fecha de entrada"])
     col_fsal = _first_existing(out, ["Fecha salida","Fecha de salida"])
@@ -157,18 +174,24 @@ def normalize_columns(df):
     if col_port: rename[col_port] = "Portal"
     if col_comi: rename[col_comi] = "Comisión portal"
     if col_ivaal:rename[col_ivaal]= "IVA del alquiler"
+
     out.rename(columns=rename, inplace=True)
 
-    for c in ["Ingreso alojamiento","Ingreso limpieza","Total ingresos","Comisión portal","IVA del alquiler","Noches ocupadas"]:
+    # Limpiar y tipar correctamente columnas monetarias (gestiona "1.234,56 €", "1234,56", "1234.56", etc.)
+    for c in ["Ingreso alojamiento","Ingreso limpieza","Total ingresos","Comisión portal","IVA del alquiler"]:
         if c in out.columns:
-            out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0)
+            out[c] = clean_money_series(out[c])
+
+    # Noches y fechas
+    if "Noches ocupadas" in out.columns:
+        out["Noches ocupadas"] = pd.to_numeric(out["Noches ocupadas"].astype(str).str.replace(r"[^\d\-]", "", regex=True), errors="coerce").fillna(0).round(0).astype(int)
     for c in ["Fecha entrada","Fecha salida"]:
         if c in out.columns:
             out[c] = pd.to_datetime(out[c], errors="coerce", dayfirst=True)
+
     if "Alojamiento" in out.columns:
         out["Alojamiento"] = out["Alojamiento"].astype(str).str.strip().str.upper()
-    if "Noches ocupadas" in out.columns:
-        out["Noches ocupadas"] = pd.to_numeric(out["Noches ocupadas"], errors="coerce").fillna(0).round(0).astype(int)
+
     return out
 
 # ---------- Carga de reglas desde CSV ----------
