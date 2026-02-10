@@ -8,6 +8,7 @@ from openpyxl.styles import Font, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
 from pathlib import Path
 import re
+import unicodedata
 
 st.set_page_config(page_title="LIQUIDACIONES (Casos 1–5) + Conciliación bancaria avanzada [v9 estricto]", page_icon="🏦", layout="wide")
 
