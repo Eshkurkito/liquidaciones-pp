@@ -31,6 +31,15 @@ def ensure_unique_columns(df: pd.DataFrame) -> pd.DataFrame:
     out.columns = new_cols
     return out
 
+def _as_series(df, col, default=0.0):
+    """Devolver Series para `col` aunque existan duplicados (elige la primera)."""
+    if col not in df.columns:
+        return pd.Series([default] * len(df), index=df.index)
+    s = df[col]
+    if isinstance(s, pd.DataFrame):
+        s = s.iloc[:, 0]
+    return s
+
 def _first_existing(df, candidates):
     import unicodedata
     def _norm_hdr(s):
@@ -195,8 +204,11 @@ def normalize_columns(df):
 
     # Tipado
     for c in ["Ingreso alojamiento","Ingreso limpieza","Total ingresos","Comisión portal","IVA del alquiler","Noches ocupadas"]:
-        if c in out.columns:
-            out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0)
+        ser = _as_series(out, c, default=0.0)
+        if c == "Noches ocupadas":
+            out[c] = pd.to_numeric(ser, errors="coerce").fillna(0).round(0).astype(int)
+        else:
+            out[c] = pd.to_numeric(ser, errors="coerce").fillna(0.0)
 
     for c in ["Fecha entrada","Fecha salida"]:
         if c in out.columns:
