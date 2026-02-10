@@ -223,11 +223,24 @@ def _to_float(x, default=0.0):
     except Exception:
         return default
 
+def _norm_key(s: str) -> str:
+    if s is None:
+        return ""
+    s = str(s).replace("\xa0", " ").strip()
+    s = re.sub(r"\s+", " ", s)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    return s.upper().strip()
+
 props_rules = {}
 for _, row in _rules_df.iterrows():
-    prop = str(row.get("property", "")).strip().upper()
+    prop_raw = row.get("property", "")
+    prop = _norm_key(prop_raw)
     if not prop:
         continue
+    # normalizar notas también (para buscar "CASO N" / "APOLO")
+    notes_raw = row.get("notes", "")
+    notes = _norm_key(notes_raw)
     props_rules[prop] = {
         "honorarios_pct": _to_float(row.get("honorarios_pct", 0.20)),
         "honorarios_apply_vat": int(row.get("honorarios_apply_vat", 0)) if str(row.get("honorarios_apply_vat","")).strip()!="" else 0,
@@ -240,7 +253,7 @@ for _, row in _rules_df.iterrows():
         "skip_booking_vat": str(row.get("skip_booking_vat","")).strip() in ("1","True","true", "YES", "Yes"),
         "split_commission": str(row.get("split_commission","")).strip() in ("1","True","true", "YES", "Yes"),
         "hon_base_exclude_commission": str(row.get("hon_base_exclude_commission","")).strip() in ("1","True","true", "YES", "Yes"),
-        "notes": str(row.get("notes","")).strip()
+        "notes": notes
     }
 
 # Generar sets por "Caso" leyendo la columna notes (espera "Caso N" en notes)
