@@ -1,5 +1,15 @@
 import pandas as pd
+import numpy as np
 from utils import normalize_columns, ensure_required, NIGHTS_COL
+
+def _cell_value(row: pd.Series, key, default=""):
+    val = row.get(key, default)
+    # protect against unexpected Series/arrays
+    if isinstance(val, (pd.Series, np.ndarray, list, tuple)):
+        return default
+    if pd.isna(val):
+        return default
+    return val
 
 def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: float = 21.0):
     df = normalize_columns(df)
@@ -12,12 +22,12 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
     out["Total ingresos"] = pd.to_numeric(out.get("Total ingresos",0.0), errors="coerce").fillna(0.0)
 
     def compute_row(r):
-        prop = str(r.get("Alojamiento","")).strip().upper()
+        prop = str(_cell_value(r, "Alojamiento", "")).strip().upper()
         rule = rules_map.get(prop, {})
 
-        ingreso = float(r.get("Ingreso alojamiento", 0.0))
-        com_orig = float(r.get("Comisión portal", 0.0))
-        portal = str(r.get("Portal","") or "").strip().lower()
+        ingreso = float(_cell_value(r, "Ingreso alojamiento", 0.0))
+        com_orig = float(_cell_value(r, "Comisión portal", 0.0))
+        portal = str(_cell_value(r, "Portal", "")).strip().lower()
 
         honorarios_pct = float(rule.get("honorarios_pct") or 0.20)
         honorarios_apply_vat = bool(int(rule.get("honorarios_apply_vat") or 1))
@@ -26,12 +36,12 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
 
         cleaning_fee_val = rule.get("cleaning_fee")
         if cleaning_fee_val is None:
-            cleaning_fee = float(r.get("Ingreso limpieza", 0.0))
+            cleaning_fee = float(_cell_value(r, "Ingreso limpieza", 0.0))
         else:
             try:
                 cleaning_fee = float(cleaning_fee_val)
             except Exception:
-                cleaning_fee = float(r.get("Ingreso limpieza", 0.0))
+                cleaning_fee = float(_cell_value(r, "Ingreso limpieza", 0.0))
 
         compute_iva_alquiler = bool(int(rule.get("compute_iva_alquiler") or 0))
         commission_vat_pct = float(rule.get("commission_vat_pct") if rule.get("commission_vat_pct") not in (None,"") else default_commission_vat)
@@ -70,8 +80,8 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
 
         gasto_limpieza = cleaning_fee
         total_gastos = round(com_total + honorarios + gasto_limpieza + amenities_amount, 2)
-        pago_prop = round(float(r.get("Total ingresos", 0.0)) - total_gastos, 2)
-        pago_recibido = round(float(r.get("Total ingresos", 0.0)) - com_total, 2)
+        pago_prop = round(float(_cell_value(r, "Total ingresos", 0.0)) - total_gastos, 2)
+        pago_recibido = round(float(_cell_value(r, "Total ingresos", 0.0)) - com_total, 2)
 
         res = {
             "Comisión portal": round(com_total, 2),
