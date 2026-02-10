@@ -253,29 +253,29 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
         split_comm = bool(int(rule.get("split_commission") or 0))
         hon_base_excl_com = bool(int(rule.get("hon_base_exclude_commission") or 0))
 
-        # ---- aplicar IVA a la comisión (si procede) ----
+        # ---- comportamiento comisión ----
         is_booking = "booking" in portal
         is_empty = portal == ""
+
+        # por defecto: com_sin_iva = com_orig
         com_sin_iva = com_orig
         iva_com = 0.0
-        # si debemos añadir IVA a la comisión (booking / empty+flag) y no está marcado skip
-        if (is_booking or (is_empty and treat_empty)) and commission_vat_pct > 0 and (not skip_booking):
-            # com_orig suele venir SIN IVA; añadir IVA opcionalmente
-            iva_com = com_orig * (commission_vat_pct / 100.0)
-            com_total = com_orig + iva_com
-        else:
-            com_total = com_orig
+        com_total = com_orig
 
-        # Si la regla indica que queremos 'split' (desglose) => exponer columnas (sin IVA + IVA) y usar lógica tipo Caso 3
-        if split_comm:
-            # mantener com_sin_iva como la base original y com_total con IVA añadido si aplica
-            # si commission_vat_pct==0 entonces iva_com será 0
-            com_sin_iva = com_orig
-            iva_com = com_orig * (commission_vat_pct / 100.0) if commission_vat_pct > 0 and not skip_booking else 0.0
-            com_total = com_sin_iva + iva_com
+        # Si NO pedimos desglose (split) aplicamos IVA a comisión solo si es booking (o empty+flag) y no skip
+        if not split_comm:
+            if (is_booking or (is_empty and treat_empty)) and commission_vat_pct > 0 and (not skip_booking):
+                iva_com = com_orig * (commission_vat_pct / 100.0)
+                com_total = com_orig + iva_com
+            else:
+                com_total = com_orig
         else:
-            # si no split pero aplicamos IVA globalmente ya lo hicimos arriba (com_total)
-            pass
+            # Si pedimos 'split' (como Caso 3 del backup) reproducir lógica del backup:
+            # - com_sin_iva = com_orig
+            # - IVA comisión = com_sin_iva * vat (NO condicionada solo a booking)
+            # - Comisión total = com_sin_iva + IVA comisión
+            iva_com = com_orig * (commission_vat_pct / 100.0) if commission_vat_pct > 0 else 0.0
+            com_total = com_sin_iva + iva_com
 
         # ---- IVA del alquiler si aplica ----
         iva_alq = (ingreso - (ingreso / 1.10)) if compute_iva_alquiler else 0.0
@@ -283,7 +283,7 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
         # ---- base para honorarios ----
         base = ingreso
         if hon_base_excl_com:
-            # decidir si excluir com_sin_iva o com_total; mantener la semántica original: excluir comisión SIN IVA
+            # mantener semántica: excluir comisión SIN IVA de la base
             base = ingreso - com_sin_iva
 
         # calcular honorarios (con/sin IVA sobre honorarios según regla)
@@ -310,7 +310,6 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
         if compute_iva_alquiler:
             res["IVA del alquiler"] = round(iva_alq,2)
         else:
-            # dejar None para que el código anterior normalice a 0.0 si procede
             res["IVA del alquiler"] = None
 
         if split_comm:
