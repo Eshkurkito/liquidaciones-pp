@@ -316,7 +316,8 @@ def apply_commission_vat_by_scope(df: pd.DataFrame, vat_pct: float, treat_empty_
         ser_portal = ser_portal.iloc[:, 0]
     ser_portal = ser_portal.astype("string").fillna("")
 
-    out[commission_col] = pd.to_numeric(out[commission_col], errors="coerce").fillna(0.0)
+    ser_comm = _as_series(out, commission_col, default=0.0)
+    out[commission_col] = pd.to_numeric(ser_comm, errors="coerce").fillna(0.0)
     mask_booking = ser_portal.str.lower().str.contains("booking", na=False)
     mask_empty   = ser_portal.str.strip().eq("")
     warn_count = int(((mask_empty) & (out[commission_col] > 0)).sum())
@@ -353,7 +354,7 @@ def process_case1(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
 
     out = df.copy()
     out["Honorarios Florit"] = out.apply(honorarios, axis=1).round(2)
-    out["Gasto limpieza"]   = pd.to_numeric(out.get("Ingreso limpieza", 0.0), errors="coerce").fillna(0.0).round(2)
+    out["Gasto limpieza"]   = pd.to_numeric(_as_series(out, "Ingreso limpieza", default=0.0), errors="coerce").fillna(0.0).round(2)
     out["Amenities"]        = out.apply(amenities, axis=1).round(2)
     out["Total Gastos"]     = (out[["Comisión portal","Honorarios Florit","Gasto limpieza","Amenities"]].sum(axis=1)).round(2)
     out["Pago al propietario"] = (out["Total ingresos"] - out["Total Gastos"]).round(2)
@@ -418,7 +419,7 @@ def process_case3(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
     out = df.copy()
 
     # Desglose de comisión del portal
-    comi_sin = pd.to_numeric(out.get("Comisión portal", 0.0), errors="coerce").fillna(0.0).round(2)
+    comi_sin = pd.to_numeric(_as_series(out, "Comisión portal", default=0.0), errors="coerce").fillna(0.0).round(2)
     out["Comisión portal (sin IVA)"] = comi_sin
     out["IVA comisión portal"] = (comi_sin * (float(vat_pct) / 100.0)).round(2)
     # “Comisión portal” pasa a ser CON IVA para que totales/pago recibido cuadren
@@ -523,7 +524,7 @@ def process_case5(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
         return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
 
     out["Honorarios Florit"] = out.apply(honorarios, axis=1).round(2)
-    out["Gasto limpieza"]   = pd.to_numeric(out.get("Ingreso limpieza", 0.0), errors="coerce").fillna(0.0).round(2)
+    out["Gasto limpieza"]   = pd.to_numeric(_as_series(out, "Ingreso limpieza", default=0.0), errors="coerce").fillna(0.0).round(2)
     out["Amenities"]        = out.apply(amenities, axis=1).round(2)
     out["Total Gastos"]     = (out[["Comisión portal","Honorarios Florit","Gasto limpieza","Amenities"]].sum(axis=1)).round(2)
     out["Pago al propietario"] = (out["Total ingresos"] - out["Total Gastos"]).round(2)
@@ -708,7 +709,7 @@ if generate:
             st.info(f"Auto-detect: columna '{best_col}' mapeada a 'Alojamiento' ({matches} coincidencias)")
 
     if "Ingreso limpieza" in df_norm.columns:
-        limp = pd.to_numeric(df_norm["Ingreso limpieza"], errors="coerce").fillna(0)
+        limp = pd.to_numeric(_as_series(df_norm, "Ingreso limpieza"), errors="coerce").fillna(0)
         if (limp > 300).any():
             st.warning("Detectadas tarifas de limpieza > 300 €. Verifica que la columna L esté mapeada como 'Ingreso limpieza' o activa el modo por letras.")
 
