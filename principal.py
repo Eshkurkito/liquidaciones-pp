@@ -321,6 +321,18 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
 
     computed = out.apply(compute_row, axis=1)
     out.update(computed)
+
+    # Asegurar que las columnas calculadas por reglas existen y son numéricas
+    expected_calc_cols = [
+        "Comisión portal (sin IVA)", "IVA comisión portal", "Comisión portal",
+        "Honorarios Florit", "Gasto limpieza", "Amenities",
+        "Total Gastos", "Pago al propietario", "Pago recibido", "IVA del alquiler"
+    ]
+    for col in expected_calc_cols:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce").fillna(0.0).round(2)
+
+    # Normalizar resto de columnas numéricas (mantener compatibilidad con BACK UP)
     for c in out.columns:
         if c != NIGHTS_COL and pd.api.types.is_numeric_dtype(out[c]):
             out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0).round(2)
