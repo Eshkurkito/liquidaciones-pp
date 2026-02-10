@@ -79,7 +79,14 @@ def show_table_es_grouped(df: pd.DataFrame, title: str, group_col: str = "Alojam
     st.subheader(title)
     if group_col not in df.columns:
         view = df.copy()
-        total = {c: (view[c].sum() if pd.api.types.is_numeric_dtype(view[c]) else "") for c in view.columns}
+        total = {}
+        for c in view.columns:
+            if pd.api.types.is_numeric_dtype(view[c]):
+                total[c] = view[c].sum()
+            elif pd.api.types.is_datetime64_any_dtype(view[c]):
+                total[c] = pd.NaT
+            else:
+                total[c] = ""
         view = pd.concat([view, pd.DataFrame([total], index=["TOTAL"])], axis=0)
         view_fmt = view.copy()
         for c in view_fmt.columns:
@@ -92,7 +99,14 @@ def show_table_es_grouped(df: pd.DataFrame, title: str, group_col: str = "Alojam
     for aloj, subdf in df.groupby(group_col):
         st.markdown(f"**{aloj}**")
         block = subdf.copy()
-        total = {c: (block[c].sum() if pd.api.types.is_numeric_dtype(block[c]) else "") for c in block.columns}
+        total = {}
+        for c in block.columns:
+            if pd.api.types.is_numeric_dtype(block[c]):
+                total[c] = block[c].sum()
+            elif pd.api.types.is_datetime64_any_dtype(block[c]):
+                total[c] = pd.NaT
+            else:
+                total[c] = ""
         block = pd.concat([block, pd.DataFrame([total], index=["TOTAL"])], axis=0)
         block_fmt = block.copy()
         for c in block_fmt.columns:
