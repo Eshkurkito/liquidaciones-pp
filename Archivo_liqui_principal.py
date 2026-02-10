@@ -197,7 +197,8 @@ _rules_path = Path(__file__).with_name("reglas_apartamentos.csv")
 if not _rules_path.exists():
     _rules_path = Path(r"c:\Users\Usuario\Desktop\liquidaciones-pp\reglas_apartamentos.csv")
 try:
-    _rules_df = pd.read_csv(_rules_path)
+    # force utf-8-sig to handle possible BOM and read all columns as strings
+    _rules_df = pd.read_csv(_rules_path, encoding="utf-8-sig", dtype=str)
 except Exception:
     _rules_df = pd.DataFrame(columns=[
         "property","honorarios_pct","honorarios_apply_vat","honorarios_vat_pct",
@@ -205,8 +206,15 @@ except Exception:
         "treat_empty_portal_as_booking","skip_booking_vat","split_commission",
         "hon_base_exclude_commission","notes"
     ])
-
+ 
 _rules_df.fillna("", inplace=True)
+_rules_df.columns = _rules_df.columns.astype(str).str.strip()  # trim any stray whitespace in headers
+
+# Debug: mostrar en la barra lateral cuántas reglas se cargaron por caso
+try:
+    st.sidebar.caption(f"Reglas cargadas: {_rules_df.shape[0]} filas")
+except Exception:
+    pass
 
 def _to_float(x, default=0.0):
     try:
