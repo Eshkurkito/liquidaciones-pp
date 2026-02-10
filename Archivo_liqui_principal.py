@@ -655,8 +655,21 @@ if generate:
     def run_case(case_no):
         df_case = df_norm.copy()
         props = props_for_case(case_no)
+
+        # diagnóstico: nombres presentes en el Excel antes de filtrar
+        orig_names = []
+        if "Alojamiento" in df_case.columns:
+            orig_names = sorted(df_case["Alojamiento"].dropna().unique())
+
         if props and "Alojamiento" in df_case.columns:
-            df_case = df_case[df_case["Alojamiento"].isin(props)]
+            df_filtered = df_case[df_case["Alojamiento"].isin(props)]
+            if df_filtered.shape[0] == 0:
+                sample = ", ".join(orig_names[:10]) + ("..." if len(orig_names) > 10 else "")
+                st.warning(f"Caso {case_no}: no se encontraron filas tras aplicar filtro por propiedades ({len(props)} reglas). Nombres detectados en el archivo: {sample}")
+                sample_rules = ", ".join(sorted(list(props))[:10]) + ("..." if len(props) > 10 else "")
+                st.caption(f"Ejemplo de reglas (Caso {case_no}): {sample_rules}")
+            df_case = df_filtered
+
         vat_map = {1: vat_case1, 2: vat_case2, 3: vat_case3, 4: vat_case4, 5: vat_case5}
         if case_no == 2:
             out, warn = processors[case_no](df_case, treat_empty_as_booking=treat_empty_as_booking, skip_booking_vat=skip_booking_vat, vat_pct=vat_map[case_no], only_apolo=only_apolo_c2)
