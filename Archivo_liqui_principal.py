@@ -133,7 +133,8 @@ LETTER_MAP_DEFAULT = {
     "F": "Fecha salida",
     "H": "Noches ocupadas",
     "I": "Ingreso alojamiento",
-    "J/L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
+    "J": "Ingreso limpieza",
+    "L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L (fallback también J)
     "O": "Total ingresos",
     "AP": "Portal",
     "AR": "Comisión portal",
@@ -324,16 +325,15 @@ def process_case1(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
     df, warn_count = apply_commission_vat_by_scope(df, vat_pct, treat_empty_as_booking, skip_booking_vat, scope)
 
     def honorarios(r):
-        key = str(r.get("Alojamiento","")).strip().upper()
+        key = _norm_key(r.get("Alojamiento",""))
         pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
-        # si honorarios_apply_vat está activado en reglas, aplicar 1 + vat%
         apply_v = props_rules.get(key, {}).get("honorarios_apply_vat", 1)
         vat_local = props_rules.get(key, {}).get("honorarios_vat_pct", 21.0)
         mult = 1.0 + (vat_local/100.0) if apply_v else 1.0
         return float(r.get("Ingreso alojamiento",0.0)) * pct * mult
 
     def amenities(r):
-        key = str(r.get("Alojamiento","")).strip().upper()
+        key = _norm_key(r.get("Alojamiento",""))
         return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
 
     out = df.copy()
@@ -357,7 +357,7 @@ def process_case2(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
     df, warn_count = apply_commission_vat_by_scope(df, vat_pct, treat_empty_as_booking, skip_booking_vat, scope_mask=mask_apolo)
 
     def honorarios(r):
-        key = str(r.get("Alojamiento","")).strip().upper()
+        key = _norm_key(r.get("Alojamiento",""))
         pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
         ingreso = float(r.get("Ingreso alojamiento",0.0))
         # Si la regla indica compute_iva_alquiler, calculamos IVA del alquiler como antes, sino usamos default 1.10
@@ -373,7 +373,7 @@ def process_case2(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
         return base * pct * mult
 
     def amenities(r):
-        key = str(r.get("Alojamiento","")).strip().upper()
+        key = _norm_key(r.get("Alojamiento",""))
         return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
 
     out = df.copy()
@@ -410,7 +410,7 @@ def process_case3(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
     out["Comisión portal"] = (out["Comisión portal (sin IVA)"] + out["IVA comisión portal"]).round(2)
 
     def honorarios(r):
-        key = str(r.get("Alojamiento","")).strip().upper()
+        key = _norm_key(r.get("Alojamiento",""))
         pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
         # Nueva fórmula: (alojamiento - comisión SIN IVA) * pct * posible IVA de honorarios
         base = float(r.get("Ingreso alojamiento",0.0)) - float(r.get("Comisión portal (sin IVA)",0.0))
@@ -420,11 +420,11 @@ def process_case3(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
         return base * pct * mult
 
     def gasto_limpieza(r):
-        key = str(r.get("Alojamiento","")).strip().upper()
+        key = _norm_key(r.get("Alojamiento",""))
         return float(props_rules.get(key, {}).get("cleaning_fee", 0.0))
 
     def amenities(r):
-        key = str(r.get("Alojamiento","")).strip().upper()
+        key = _norm_key(r.get("Alojamiento",""))
         return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
 
     out["Honorarios Florit"] = out.apply(honorarios, axis=1).round(2)
@@ -495,7 +495,7 @@ def process_case5(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
     out["IVA del alquiler"] = ingreso - (ingreso / 1.10)
 
     def honorarios(r):
-        key = str(r.get("Alojamiento","")).strip().upper()
+        key = _norm_key(r.get("Alojamiento",""))
         pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
         base = float(r.get("Ingreso alojamiento",0.0)) - float(r.get("IVA del alquiler",0.0)) - float(r.get("Comisión portal",0.0))
         apply_v = props_rules.get(key, {}).get("honorarios_apply_vat", 1)
@@ -504,7 +504,7 @@ def process_case5(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
         return base * pct * mult
 
     def amenities(r):
-        key = str(r.get("Alojamiento","")).strip().upper()
+        key = _norm_key(r.get("Alojamiento",""))
         return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
 
     out["Honorarios Florit"] = out.apply(honorarios, axis=1).round(2)
