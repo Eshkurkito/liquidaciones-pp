@@ -32,9 +32,22 @@ def ensure_unique_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 def _first_existing(df, candidates):
-    norm_map = {str(c).strip().lower(): c for c in df.columns}
+    import unicodedata
+    def _norm_hdr(s):
+        if s is None:
+            return ""
+        s = str(s).replace("\xa0", " ").strip()
+        # quitar comillas o apóstrofes al inicio/final
+        s = s.strip("\"' ")
+        # eliminar caracteres raros manteniendo letras, números, espacios y guiones
+        s = re.sub(r"[^\w\s\-ÁÉÍÓÚáéíóúÑñÜü]", " ", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+        return s.lower().strip()
+    norm_map = { _norm_hdr(c): c for c in df.columns }
     for cand in candidates:
-        k = str(cand).strip().lower()
+        k = _norm_hdr(cand)
         if k in norm_map:
             return norm_map[k]
     return None
