@@ -77,6 +77,11 @@ def find_col(df: pd.DataFrame, base: str):
 
 def show_table_es_grouped(df: pd.DataFrame, title: str, group_col: str = "Alojamiento"):
     st.subheader(title)
+
+    # Asegurar nombres de columnas como str (evita None y errores de Arrow)
+    df = df.copy()
+    df.columns = [str(c) if c is not None else "" for c in df.columns]
+
     if group_col not in df.columns:
         view = df.copy()
         total = {}
