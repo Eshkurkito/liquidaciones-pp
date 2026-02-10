@@ -761,3 +761,12 @@ if generate:
         if warn > 0 and not treat_empty_as_booking:
             st.warning("Hay reservas con comisión > 0 pero portal vacío. Si deben ser Booking, marca ‘Tratar portal vacío como Booking’.")
 
+def _normalize_name_for_key(s: str) -> str:
+    if s is None:
+        return ""
+    s = str(s).replace("\xa0", " ").strip()
+    s = re.sub(r"\s+", " ", s)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    return s.upper().strip()
+
