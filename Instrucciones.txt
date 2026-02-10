@@ -1,0 +1,33 @@
+# Reglas por piso — formato CSV (resumen)
+
+Colocar el CSV en el proyecto (p. ej. data/reglas_apartamentos.csv) o subirlo en la UI "Usar reglas por piso".
+
+Formato (cabecera, columnas oblig./recomendadas):
+- property — texto único, normalizado (se compara en mayúsculas; debe coincidir con "Alojamiento" tras normalización).
+- honorarios_pct — decimal (ej. 0.20 → 20%). Base según hon_base_exclude_commission.
+- honorarios_apply_vat — 0/1. Si 1, añadir IVA a honorarios.
+- honorarios_vat_pct — porcentaje (ej. 21.0).
+- amenities_amount — importe fijo en € (ej. 11.58).
+- cleaning_fee — importe fijo en € (se usa si no hay columna "Ingreso limpieza" en la fila).
+- compute_iva_alquiler — 0/1. Si 1, calcula IVA alquiler = ingreso - (ingreso / 1.10).
+- commission_vat_pct — % que se añade a la comisión cuando aplica (booking).
+- treat_empty_portal_as_booking — 0/1. Si 1, portal vacío se trata como booking.
+- skip_booking_vat — 0/1. Si 1, no añadir IVA a la comisión aun siendo booking.
+- split_commission — 0/1. Si 1, crea columnas "Comisión portal (sin IVA)" y "IVA comisión portal".
+- hon_base_exclude_commission — 0/1. Si 1 (por defecto), los honorarios se calculan sobre la base que excluye la comisión.
+- notes — texto libre (no tiene efecto en cálculos).
+
+Reglas de normalización / matching
+- La app normaliza "Alojamiento" a mayúsculas y trim; el valor en `property` debe coincidir con ese formato.
+- Si hay columnas numéricas presentes en la fila (ej. "Ingreso limpieza") prevalecen sobre `cleaning_fee`.
+
+Ejemplo de fila:
+property,honorarios_pct,honorarios_apply_vat,honorarios_vat_pct,amenities_amount,cleaning_fee,compute_iva_alquiler,commission_vat_pct,treat_empty_portal_as_booking,skip_booking_vat,split_commission,hon_base_exclude_commission,notes  
+APOLO 029,0.20,1,21.0,11.58,0,1,21.0,0,0,0,1,"APOLO caso 2"
+
+Recomendaciones
+- Mantener `property` exactamente como sale tras normalizar las reservas (mayúsculas).  
+- Usar decimales para porcentajes de honorarios (0.20) y punto decimal para IVA (21.0).  
+- Probar la app con un subset de filas después de cambiar reglas.
+
+¿Quieres que añada este README al repo y que sustituya el cargador para ignorar la columna `case`? 
