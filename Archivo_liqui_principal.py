@@ -120,7 +120,7 @@ LETTER_MAP_DEFAULT = {
     "F": "Fecha salida",
     "H": "Noches ocupadas",
     "I": "Ingreso alojamiento",
-    "J/L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
+    "L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
     "O": "Total ingresos",
     "AP": "Portal",
     "AR": "Comisión portal",
