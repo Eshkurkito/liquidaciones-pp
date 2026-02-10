@@ -6,6 +6,7 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
+from pathlib import Path
 import re
 
 st.set_page_config(page_title="LIQUIDACIONES (Casos 1–5) + Conciliación bancaria avanzada [v9 estricto]", page_icon="🏦", layout="wide")
@@ -118,7 +119,7 @@ LETTER_MAP_DEFAULT = {
     "F": "Fecha salida",
     "H": "Noches ocupadas",
     "I": "Ingreso alojamiento",
-    "L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
+    "J/L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
     "O": "Total ingresos",
     "AP": "Portal",
     "AR": "Comisión portal",
@@ -190,51 +191,58 @@ def normalize_columns(df):
 
     return out
 
-# ========= Reglas de casos =========
-case1_percent_amenities = {
-    "APOLO 180": (0.20, 12.04), "ALMIRANTE 01": (0.22, 11.33), "ALMIRANTE 02": (0.22, 11.33),
-    "CADIZ": (0.20, 9.11), "DENIA 61": (0.20, 10.96), "DOLORES ALCAYDE 04": (0.20, 11.33),
-    "DR.LLUCH": (0.20, 11.16), "ERUDITO": (0.20, 13.37), "GOZALBO": (0.20, 15.25),
-    "LA ELIANA": (0.20, 15.25), "MORAIRA": (0.25, 11.33), "NAPOLES Y SICILIA": (0.25, 0.00),
-    "OLIVERETA 5": (0.20, 0.00), "OVE 01": (0.18, 0.00), "OVE 02": (0.18, 0.00),
-    "QUART I": (0.20, 9.09), "QUART II": (0.20, 9.09), "SAN LUIS": (0.20, 11.02),
-    "SERRANOS": (0.20, 13.37), "SEVILLA": (0.18, 9.45), "TUNDIDORES": (0.20, 7.85),
-    "VALLE": (0.20, 11.33),
-}
-case1_props = set(case1_percent_amenities.keys())
+# ========= Reglas de casos (leer desde CSV) =========
+# Se espera un archivo 'reglas_apartamentos.csv' junto al script o en la carpeta del proyecto.
+_rules_path = Path(__file__).with_name("reglas_apartamentos.csv")
+if not _rules_path.exists():
+    _rules_path = Path(r"c:\Users\Usuario\Desktop\liquidaciones-pp\reglas_apartamentos.csv")
+try:
+    _rules_df = pd.read_csv(_rules_path)
+except Exception:
+    _rules_df = pd.DataFrame(columns=[
+        "property","honorarios_pct","honorarios_apply_vat","honorarios_vat_pct",
+        "amenities_amount","cleaning_fee","compute_iva_alquiler","commission_vat_pct",
+        "treat_empty_portal_as_booking","skip_booking_vat","split_commission",
+        "hon_base_exclude_commission","notes"
+    ])
 
-case2_percent_amenities = {
-    "VISITACION": (0.20, 14.88),
-    "PADRE PORTA 06": (0.20, 12.09), "PADRE PORTA 07": (0.20, 12.09), "PADRE PORTA 08": (0.20, 12.09),
-    "PADRE PORTA 09": (0.20, 12.09), "PADRE PORTA 10": (0.20, 12.09),
-    "LLADRO Y MALLI 00": (0.20, 9.45), "LLADRO Y MALLI 01": (0.20, 9.45), "LLADRO Y MALLI 02": (0.20, 9.45),
-    "LLADRO Y MALLI 03": (0.20, 9.45), "LLADRO Y MALLI 04": (0.20, 9.45),
-    "APOLO 029": (0.20, 11.58), "APOLO 197": (0.20, 17.40),
-}
-case2_props = set(case2_percent_amenities.keys())
+_rules_df.fillna("", inplace=True)
 
-case3_cleaning_amenities = {
-    "ZAPATEROS 10-2": (0.20, 60.00, 15.24),
-    "ZAPATEROS 10-6": (0.20, 75.00, 15.24),
-    "ZAPATEROS 10-8": (0.20, 75.00, 15.24),
-    "ZAPATEROS 12-5": (0.20, 60.00, 11.33),
-    "ALFARO": (0.20, 80.00, 14.88),
-}
-case3_props = set(case3_cleaning_amenities.keys())
+def _to_float(x, default=0.0):
+    try:
+        return float(x)
+    except Exception:
+        return default
 
-case4_props = {
-    "SERRERIA 04", "SERRERIA 05", "RETOR A", "RETOR B",
-    "PASAJE ANGELES Y FEDERICO 01", "PASAJE ANGELES Y FEDERICO 02", "PASAJE ANGELES Y FEDERICO 03",
-    "MALILLA 05", "MALILLA 06", "MALILLA 07", "MALILLA 08", "MALILLA 14", "MALILLA 15",
-    "BENICALAP 01", "BENICALAP 02", "BENICALAP 03", "BENICALAP 04", "BENICALAP 05", "BENICALAP 06"
-}
+props_rules = {}
+for _, row in _rules_df.iterrows():
+    prop = str(row.get("property", "")).strip().upper()
+    if not prop:
+        continue
+    props_rules[prop] = {
+        "honorarios_pct": _to_float(row.get("honorarios_pct", 0.20)),
+        "honorarios_apply_vat": int(row.get("honorarios_apply_vat", 0)) if str(row.get("honorarios_apply_vat","")).strip()!="" else 0,
+        "honorarios_vat_pct": _to_float(row.get("honorarios_vat_pct", 21.0)),
+        "amenities_amount": _to_float(row.get("amenities_amount", 0.0)),
+        "cleaning_fee": _to_float(row.get("cleaning_fee", 0.0)),
+        "compute_iva_alquiler": int(row.get("compute_iva_alquiler", 0)) if str(row.get("compute_iva_alquiler","")).strip()!="" else 0,
+        "commission_vat_pct": _to_float(row.get("commission_vat_pct", 0.0)),
+        "treat_empty_portal_as_booking": str(row.get("treat_empty_portal_as_booking","")).strip() in ("1","True","true", "YES", "Yes"),
+        "skip_booking_vat": str(row.get("skip_booking_vat","")).strip() in ("1","True","true", "YES", "Yes"),
+        "split_commission": str(row.get("split_commission","")).strip() in ("1","True","true", "YES", "Yes"),
+        "hon_base_exclude_commission": str(row.get("hon_base_exclude_commission","")).strip() in ("1","True","true", "YES", "Yes"),
+        "notes": str(row.get("notes","")).strip()
+    }
 
-case5_percent_amenities = {
-    "HOMERO 01": (0.20, 0.00), "HOMERO 02": (0.20, 0.00)
-}
-case5_props = set(case5_percent_amenities.keys())
+# Generar sets por "Caso" leyendo la columna notes (espera "Caso N" en notes)
+case1_props = {p for p, v in props_rules.items() if "CASO 1" in v["notes"].upper()}
+case2_props = {p for p, v in props_rules.items() if "CASO 2" in v["notes"].upper()}
+case3_props = {p for p, v in props_rules.items() if "CASO 3" in v["notes"].upper()}
+case4_props = {p for p, v in props_rules.items() if "CASO 4" in v["notes"].upper()}
+case5_props = {p for p, v in props_rules.items() if "CASO 5" in v["notes"].upper()}
 
-APOLO_ONLY = {"APOLO 029", "APOLO 197"}
+# APOLO_ONLY: propiedades marcadas con "APOLO" en nombre o en notes
+APOLO_ONLY = {p for p in props_rules.keys() if "APOLO" in p or "APOLO" in props_rules[p]["notes"].upper()}
 
 def props_for_case(case):
     if case == 1: return case1_props
@@ -282,12 +290,16 @@ def process_case1(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
 
     def honorarios(r):
         key = str(r.get("Alojamiento","")).strip().upper()
-        pct = case1_percent_amenities.get(key,(0.20,0.0))[0]
-        return float(r.get("Ingreso alojamiento",0.0)) * pct * 1.21
+        pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
+        # si honorarios_apply_vat está activado en reglas, aplicar 1 + vat%
+        apply_v = props_rules.get(key, {}).get("honorarios_apply_vat", 1)
+        vat_local = props_rules.get(key, {}).get("honorarios_vat_pct", 21.0)
+        mult = 1.0 + (vat_local/100.0) if apply_v else 1.0
+        return float(r.get("Ingreso alojamiento",0.0)) * pct * mult
 
     def amenities(r):
         key = str(r.get("Alojamiento","")).strip().upper()
-        return float(case1_percent_amenities.get(key,(0.20,0.0))[1])
+        return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
 
     out = df.copy()
     out["Honorarios Florit"] = out.apply(honorarios, axis=1).round(2)
@@ -311,15 +323,23 @@ def process_case2(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
 
     def honorarios(r):
         key = str(r.get("Alojamiento","")).strip().upper()
-        pct = case2_percent_amenities.get(key,(0.20,0.0))[0]
+        pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
         ingreso = float(r.get("Ingreso alojamiento",0.0))
-        iva = ingreso - (ingreso / 1.10)
-        base = ingreso - iva
-        return base * pct * 1.21
+        # Si la regla indica compute_iva_alquiler, calculamos IVA del alquiler como antes, sino usamos default 1.10
+        if props_rules.get(key, {}).get("compute_iva_alquiler", 0):
+            iva = ingreso - (ingreso / 1.10)
+            base = ingreso - iva
+        else:
+            iva = ingreso - (ingreso / 1.10)
+            base = ingreso - iva
+        apply_v = props_rules.get(key, {}).get("honorarios_apply_vat", 1)
+        vat_local = props_rules.get(key, {}).get("honorarios_vat_pct", 21.0)
+        mult = 1.0 + (vat_local/100.0) if apply_v else 1.0
+        return base * pct * mult
 
     def amenities(r):
         key = str(r.get("Alojamiento","")).strip().upper()
-        return float(case2_percent_amenities.get(key,(0.20,0.0))[1])
+        return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
 
     out = df.copy()
     out["IVA del alquiler"] = pd.to_numeric(out["Ingreso alojamiento"], errors="coerce").fillna(0.0) - (pd.to_numeric(out["Ingreso alojamiento"], errors="coerce").fillna(0.0) / 1.10)
@@ -356,18 +376,21 @@ def process_case3(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
 
     def honorarios(r):
         key = str(r.get("Alojamiento","")).strip().upper()
-        pct = case3_cleaning_amenities.get(key,(0.20,0.0,0.0))[0]
-        # Nueva fórmula: (alojamiento - comisión SIN IVA) * 0.20 * 1.21
+        pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
+        # Nueva fórmula: (alojamiento - comisión SIN IVA) * pct * posible IVA de honorarios
         base = float(r.get("Ingreso alojamiento",0.0)) - float(r.get("Comisión portal (sin IVA)",0.0))
-        return base * pct * 1.21
+        apply_v = props_rules.get(key, {}).get("honorarios_apply_vat", 1)
+        vat_local = props_rules.get(key, {}).get("honorarios_vat_pct", 21.0)
+        mult = 1.0 + (vat_local/100.0) if apply_v else 1.0
+        return base * pct * mult
 
     def gasto_limpieza(r):
         key = str(r.get("Alojamiento","")).strip().upper()
-        return float(case3_cleaning_amenities.get(key,(0.20,0.0,0.0))[1])
+        return float(props_rules.get(key, {}).get("cleaning_fee", 0.0))
 
     def amenities(r):
         key = str(r.get("Alojamiento","")).strip().upper()
-        return float(case3_cleaning_amenities.get(key,(0.20,0.0,0.0))[2])
+        return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
 
     out["Honorarios Florit"] = out.apply(honorarios, axis=1).round(2)
     out["Gasto limpieza"]   = out.apply(gasto_limpieza, axis=1).round(2)
@@ -438,13 +461,16 @@ def process_case5(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
 
     def honorarios(r):
         key = str(r.get("Alojamiento","")).strip().upper()
-        pct = case5_percent_amenities.get(key,(0.20,0.0))[0]
+        pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
         base = float(r.get("Ingreso alojamiento",0.0)) - float(r.get("IVA del alquiler",0.0)) - float(r.get("Comisión portal",0.0))
-        return base * pct * 1.21
+        apply_v = props_rules.get(key, {}).get("honorarios_apply_vat", 1)
+        vat_local = props_rules.get(key, {}).get("honorarios_vat_pct", 21.0)
+        mult = 1.0 + (vat_local/100.0) if apply_v else 1.0
+        return base * pct * mult
 
     def amenities(r):
         key = str(r.get("Alojamiento","")).strip().upper()
-        return float(case5_percent_amenities.get(key,(0.20,0.0))[1])
+        return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
 
     out["Honorarios Florit"] = out.apply(honorarios, axis=1).round(2)
     out["Gasto limpieza"]   = pd.to_numeric(out.get("Ingreso limpieza", 0.0), errors="coerce").fillna(0.0).round(2)
@@ -684,5 +710,3 @@ if generate:
         st.session_state["df_liq_label"] = f"Caso {case_no}"
         if warn > 0 and not treat_empty_as_booking:
             st.warning("Hay reservas con comisión > 0 pero portal vacío. Si deben ser Booking, marca ‘Tratar portal vacío como Booking’.")
-
-st.divider()
