@@ -117,12 +117,18 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
             out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0).round(2)
 
     # Ensure Portal and Comisión portal are treated as Series (handle duplicate column names)
-    if "Portal" in out.columns:
-        portal_series = out["Portal"]
-    else:
-        portal_series = pd.Series([""] * len(out), index=out.index)
+    def _to_series(obj, length, default=""):
+        if obj is None:
+            return pd.Series([default] * length, index=out.index)
+        if isinstance(obj, pd.DataFrame):
+            # duplicated column name -> take first column
+            return obj.iloc[:, 0]
+        if isinstance(obj, pd.Series):
+            return obj
+        return pd.Series([obj] * length, index=out.index)
 
-    com_series = out["Comisión portal"] if "Comisión portal" in out.columns else pd.Series([0.0] * len(out), index=out.index)
+    portal_series = _to_series(out.get("Portal", None), len(out), default="")
+    com_series = _to_series(out.get("Comisión portal", None), len(out), default=0.0)
 
     portal_stripped = portal_series.astype(str).str.strip()
     com_numeric = pd.to_numeric(com_series, errors="coerce").fillna(0.0)
