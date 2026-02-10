@@ -156,6 +156,9 @@ def normalize_columns_by_letters(df, letter_map=LETTER_MAP_DEFAULT):
     for L, std in letter_map.items():
         i = letters_to_idx(L)
         if i is not None and i < len(cols):
+            # evitar mapear dos columnas distintas al mismo nombre estándar
+            if std in rename.values():
+                continue
             rename[cols[i]] = std
     out.rename(columns=rename, inplace=True)
     return normalize_columns(out)
