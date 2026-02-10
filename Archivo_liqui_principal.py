@@ -671,20 +671,7 @@ if generate:
     df_in = pd.read_excel(file, header=header_row)
     df_in = ensure_unique_columns(df_in)
 
-    # --- DIAGNÓSTICO: columnas detectadas y muestra --- 
-    cols = list(df_in.columns)
-    col_map = [f"{get_column_letter(i+1)}: {repr(c)}" for i, c in enumerate(cols)]
-    st.caption("DEBUG — columnas detectadas (Letter: header_repr):")
-    st.write(col_map)
-    st.caption("DEBUG — primeras 5 filas (raw):")
-    st.dataframe(df_in.head(5))
-    # listar candidatas por texto en header
-    candidates = [c for c in cols if any(k in str(c).lower() for k in ("aloj", "nombre"))]
-    st.caption(f"DEBUG — columnas candidatas para 'Alojamiento': {candidates}")
-    for c in candidates:
-        st.write(f"Columna {repr(c)} — primeras 10 valores:")
-        st.write(df_in[c].astype(str).head(10).tolist())
-    # --- fin diagnóstico ---
+    # DEBUG eliminado: ya comprobada la lectura del Excel
 
     df_norm = normalize_columns_by_letters(df_in) if st.session_state.by_letters else normalize_columns(df_in)
     df_norm = ensure_unique_columns(df_norm)
