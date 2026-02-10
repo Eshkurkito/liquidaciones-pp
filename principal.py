@@ -6,9 +6,11 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
-from pathlib import Path
 import re
-import unicodedata
+import os
+from pathlib import Path
+import pandas as pd
+from typing import Optional, Dict
 
 st.set_page_config(page_title="LIQUIDACIONES (Casos 1–5) + Conciliación bancaria avanzada [v9 estricto]", page_icon="🏦", layout="wide")
 
@@ -31,32 +33,10 @@ def ensure_unique_columns(df: pd.DataFrame) -> pd.DataFrame:
     out.columns = new_cols
     return out
 
-def _as_series(df, col, default=0.0):
-    """Devolver Series para `col` aunque existan duplicados (elige la primera)."""
-    if col not in df.columns:
-        return pd.Series([default] * len(df), index=df.index)
-    s = df[col]
-    if isinstance(s, pd.DataFrame):
-        s = s.iloc[:, 0]
-    return s
-
 def _first_existing(df, candidates):
-    import unicodedata
-    def _norm_hdr(s):
-        if s is None:
-            return ""
-        s = str(s).replace("\xa0", " ").strip()
-        # quitar comillas o apóstrofes al inicio/final
-        s = s.strip("\"' ")
-        # eliminar caracteres raros manteniendo letras, números, espacios y guiones
-        s = re.sub(r"[^\w\s\-ÁÉÍÓÚáéíóúÑñÜü]", " ", s)
-        s = re.sub(r"\s+", " ", s).strip()
-        s = unicodedata.normalize("NFKD", s)
-        s = "".join(ch for ch in s if not unicodedata.combining(ch))
-        return s.lower().strip()
-    norm_map = { _norm_hdr(c): c for c in df.columns }
+    norm_map = {str(c).strip().lower(): c for c in df.columns}
     for cand in candidates:
-        k = _norm_hdr(cand)
+        k = str(cand).strip().lower()
         if k in norm_map:
             return norm_map[k]
     return None
@@ -142,8 +122,7 @@ LETTER_MAP_DEFAULT = {
     "F": "Fecha salida",
     "H": "Noches ocupadas",
     "I": "Ingreso alojamiento",
-    "J": "Ingreso limpieza",
-    "L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L (fallback también J)
+    "L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
     "O": "Total ingresos",
     "AP": "Portal",
     "AR": "Comisión portal",
@@ -165,9 +144,6 @@ def normalize_columns_by_letters(df, letter_map=LETTER_MAP_DEFAULT):
     for L, std in letter_map.items():
         i = letters_to_idx(L)
         if i is not None and i < len(cols):
-            # evitar mapear dos columnas distintas al mismo nombre estándar
-            if std in rename.values():
-                continue
             rename[cols[i]] = std
     out.rename(columns=rename, inplace=True)
     return normalize_columns(out)
@@ -204,96 +180,65 @@ def normalize_columns(df):
 
     # Tipado
     for c in ["Ingreso alojamiento","Ingreso limpieza","Total ingresos","Comisión portal","IVA del alquiler","Noches ocupadas"]:
-        ser = _as_series(out, c, default=0.0)
-        if c == "Noches ocupadas":
-            out[c] = pd.to_numeric(ser, errors="coerce").fillna(0).round(0).astype(int)
-        else:
-            out[c] = pd.to_numeric(ser, errors="coerce").fillna(0.0)
+        if c in out.columns:
+            out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0)
 
     for c in ["Fecha entrada","Fecha salida"]:
         if c in out.columns:
             out[c] = pd.to_datetime(out[c], errors="coerce", dayfirst=True)
 
     if "Alojamiento" in out.columns:
-        out["Alojamiento"] = out["Alojamiento"].astype(str).apply(lambda v: _norm_key(v))
+        out["Alojamiento"] = out["Alojamiento"].astype(str).str.strip().str.upper()
     if "Noches ocupadas" in out.columns:
         out["Noches ocupadas"] = pd.to_numeric(out["Noches ocupadas"], errors="coerce").fillna(0).round(0).astype(int)
 
     return out
 
-# ========= Reglas de casos (leer desde CSV) =========
-# Se espera un archivo 'reglas_apartamentos.csv' junto al script o en la carpeta del proyecto.
-_rules_path = Path(__file__).with_name("reglas_apartamentos.csv")
-if not _rules_path.exists():
-    _rules_path = Path(r"c:\Users\Usuario\Desktop\liquidaciones-pp\reglas_apartamentos.csv")
-try:
-    # force utf-8-sig to handle possible BOM and read all columns as strings
-    _rules_df = pd.read_csv(_rules_path, encoding="utf-8-sig", dtype=str)
-except Exception:
-    _rules_df = pd.DataFrame(columns=[
-        "property","honorarios_pct","honorarios_apply_vat","honorarios_vat_pct",
-        "amenities_amount","cleaning_fee","compute_iva_alquiler","commission_vat_pct",
-        "treat_empty_portal_as_booking","skip_booking_vat","split_commission",
-        "hon_base_exclude_commission","notes"
-    ])
- 
-_rules_df.fillna("", inplace=True)
-_rules_df.columns = _rules_df.columns.astype(str).str.strip()  # trim any stray whitespace in headers
+# ========= Reglas de casos =========
+case1_percent_amenities = {
+    "APOLO 180": (0.20, 12.04), "ALMIRANTE 01": (0.22, 11.33), "ALMIRANTE 02": (0.22, 11.33),
+    "CADIZ": (0.20, 9.11), "DENIA 61": (0.20, 10.96), "DOLORES ALCAYDE 04": (0.20, 11.33),
+    "DR.LLUCH": (0.20, 11.16), "ERUDITO": (0.20, 13.37), "GOZALBO": (0.20, 15.25),
+    "LA ELIANA": (0.20, 15.25), "MORAIRA": (0.25, 11.33), "NAPOLES Y SICILIA": (0.25, 0.00),
+    "OLIVERETA 5": (0.20, 0.00), "OVE 01": (0.18, 0.00), "OVE 02": (0.18, 0.00),
+    "QUART I": (0.20, 9.09), "QUART II": (0.20, 9.09), "SAN LUIS": (0.20, 11.02),
+    "SERRANOS": (0.20, 13.37), "SEVILLA": (0.18, 9.45), "TUNDIDORES": (0.20, 7.85),
+    "VALLE": (0.20, 11.33),
+}
+case1_props = set(case1_percent_amenities.keys())
 
-# Debug: mostrar en la barra lateral cuántas reglas se cargaron por caso
-try:
-    st.sidebar.caption(f"Reglas cargadas: {_rules_df.shape[0]} filas")
-except Exception:
-    pass
+case2_percent_amenities = {
+    "VISITACION": (0.20, 14.88),
+    "PADRE PORTA 06": (0.20, 12.09), "PADRE PORTA 07": (0.20, 12.09), "PADRE PORTA 08": (0.20, 12.09),
+    "PADRE PORTA 09": (0.20, 12.09), "PADRE PORTA 10": (0.20, 12.09),
+    "LLADRO Y MALLI 00": (0.20, 9.45), "LLADRO Y MALLI 01": (0.20, 9.45), "LLADRO Y MALLI 02": (0.20, 9.45),
+    "LLADRO Y MALLI 03": (0.20, 9.45), "LLADRO Y MALLI 04": (0.20, 9.45),
+    "APOLO 029": (0.20, 11.58), "APOLO 197": (0.20, 17.40),
+}
+case2_props = set(case2_percent_amenities.keys())
 
-def _to_float(x, default=0.0):
-    try:
-        return float(x)
-    except Exception:
-        return default
+case3_cleaning_amenities = {
+    "ZAPATEROS 10-2": (0.20, 60.00, 15.24),
+    "ZAPATEROS 10-6": (0.20, 75.00, 15.24),
+    "ZAPATEROS 10-8": (0.20, 75.00, 15.24),
+    "ZAPATEROS 12-5": (0.20, 60.00, 11.33),
+    "ALFARO": (0.20, 80.00, 14.88),
+}
+case3_props = set(case3_cleaning_amenities.keys())
 
-def _norm_key(s: str) -> str:
-    if s is None:
-        return ""
-    s = str(s).replace("\xa0", " ").strip()
-    s = re.sub(r"\s+", " ", s)
-    s = unicodedata.normalize("NFKD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    return s.upper().strip()
+case4_props = {
+    "SERRERIA 04", "SERRERIA 05", "RETOR A", "RETOR B",
+    "PASAJE ANGELES Y FEDERICO 01", "PASAJE ANGELES Y FEDERICO 02", "PASAJE ANGELES Y FEDERICO 03",
+    "MALILLA 05", "MALILLA 06", "MALILLA 07", "MALILLA 08", "MALILLA 14", "MALILLA 15",
+    "BENICALAP 01", "BENICALAP 02", "BENICALAP 03", "BENICALAP 04", "BENICALAP 05", "BENICALAP 06"
+}
 
-props_rules = {}
-for _, row in _rules_df.iterrows():
-    prop_raw = row.get("property", "")
-    prop = _norm_key(prop_raw)
-    if not prop:
-        continue
-    # normalizar notas también (para buscar "CASO N" / "APOLO")
-    notes_raw = row.get("notes", "")
-    notes = _norm_key(notes_raw)
-    props_rules[prop] = {
-        "honorarios_pct": _to_float(row.get("honorarios_pct", 0.20)),
-        "honorarios_apply_vat": int(row.get("honorarios_apply_vat", 0)) if str(row.get("honorarios_apply_vat","")).strip()!="" else 0,
-        "honorarios_vat_pct": _to_float(row.get("honorarios_vat_pct", 21.0)),
-        "amenities_amount": _to_float(row.get("amenities_amount", 0.0)),
-        "cleaning_fee": _to_float(row.get("cleaning_fee", 0.0)),
-        "compute_iva_alquiler": int(row.get("compute_iva_alquiler", 0)) if str(row.get("compute_iva_alquiler","")).strip()!="" else 0,
-        "commission_vat_pct": _to_float(row.get("commission_vat_pct", 0.0)),
-        "treat_empty_portal_as_booking": str(row.get("treat_empty_portal_as_booking","")).strip() in ("1","True","true", "YES", "Yes"),
-        "skip_booking_vat": str(row.get("skip_booking_vat","")).strip() in ("1","True","true", "YES", "Yes"),
-        "split_commission": str(row.get("split_commission","")).strip() in ("1","True","true", "YES", "Yes"),
-        "hon_base_exclude_commission": str(row.get("hon_base_exclude_commission","")).strip() in ("1","True","true", "YES", "Yes"),
-        "notes": notes
-    }
+case5_percent_amenities = {
+    "HOMERO 01": (0.20, 0.00), "HOMERO 02": (0.20, 0.00)
+}
+case5_props = set(case5_percent_amenities.keys())
 
-# Generar sets por "Caso" leyendo la columna notes (espera "Caso N" en notes)
-case1_props = {p for p, v in props_rules.items() if "CASO 1" in v["notes"].upper()}
-case2_props = {p for p, v in props_rules.items() if "CASO 2" in v["notes"].upper()}
-case3_props = {p for p, v in props_rules.items() if "CASO 3" in v["notes"].upper()}
-case4_props = {p for p, v in props_rules.items() if "CASO 4" in v["notes"].upper()}
-case5_props = {p for p, v in props_rules.items() if "CASO 5" in v["notes"].upper()}
-
-# APOLO_ONLY: propiedades marcadas con "APOLO" en nombre o en notes
-APOLO_ONLY = {p for p in props_rules.keys() if "APOLO" in p or "APOLO" in props_rules[p]["notes"].upper()}
+APOLO_ONLY = {"APOLO 029", "APOLO 197"}
 
 def props_for_case(case):
     if case == 1: return case1_props
@@ -316,8 +261,7 @@ def apply_commission_vat_by_scope(df: pd.DataFrame, vat_pct: float, treat_empty_
         ser_portal = ser_portal.iloc[:, 0]
     ser_portal = ser_portal.astype("string").fillna("")
 
-    ser_comm = _as_series(out, commission_col, default=0.0)
-    out[commission_col] = pd.to_numeric(ser_comm, errors="coerce").fillna(0.0)
+    out[commission_col] = pd.to_numeric(out[commission_col], errors="coerce").fillna(0.0)
     mask_booking = ser_portal.str.lower().str.contains("booking", na=False)
     mask_empty   = ser_portal.str.strip().eq("")
     warn_count = int(((mask_empty) & (out[commission_col] > 0)).sum())
@@ -341,20 +285,17 @@ def process_case1(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
     df, warn_count = apply_commission_vat_by_scope(df, vat_pct, treat_empty_as_booking, skip_booking_vat, scope)
 
     def honorarios(r):
-        key = _norm_key(r.get("Alojamiento",""))
-        pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
-        apply_v = props_rules.get(key, {}).get("honorarios_apply_vat", 1)
-        vat_local = props_rules.get(key, {}).get("honorarios_vat_pct", 21.0)
-        mult = 1.0 + (vat_local/100.0) if apply_v else 1.0
-        return float(r.get("Ingreso alojamiento",0.0)) * pct * mult
+        key = str(r.get("Alojamiento","")).strip().upper()
+        pct = case1_percent_amenities.get(key,(0.20,0.0))[0]
+        return float(r.get("Ingreso alojamiento",0.0)) * pct * 1.21
 
     def amenities(r):
-        key = _norm_key(r.get("Alojamiento",""))
-        return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
+        key = str(r.get("Alojamiento","")).strip().upper()
+        return float(case1_percent_amenities.get(key,(0.20,0.0))[1])
 
     out = df.copy()
     out["Honorarios Florit"] = out.apply(honorarios, axis=1).round(2)
-    out["Gasto limpieza"]   = pd.to_numeric(_as_series(out, "Ingreso limpieza", default=0.0), errors="coerce").fillna(0.0).round(2)
+    out["Gasto limpieza"]   = pd.to_numeric(out.get("Ingreso limpieza", 0.0), errors="coerce").fillna(0.0).round(2)
     out["Amenities"]        = out.apply(amenities, axis=1).round(2)
     out["Total Gastos"]     = (out[["Comisión portal","Honorarios Florit","Gasto limpieza","Amenities"]].sum(axis=1)).round(2)
     out["Pago al propietario"] = (out["Total ingresos"] - out["Total Gastos"]).round(2)
@@ -373,24 +314,16 @@ def process_case2(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
     df, warn_count = apply_commission_vat_by_scope(df, vat_pct, treat_empty_as_booking, skip_booking_vat, scope_mask=mask_apolo)
 
     def honorarios(r):
-        key = _norm_key(r.get("Alojamiento",""))
-        pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
+        key = str(r.get("Alojamiento","")).strip().upper()
+        pct = case2_percent_amenities.get(key,(0.20,0.0))[0]
         ingreso = float(r.get("Ingreso alojamiento",0.0))
-        # Si la regla indica compute_iva_alquiler, calculamos IVA del alquiler como antes, sino usamos default 1.10
-        if props_rules.get(key, {}).get("compute_iva_alquiler", 0):
-            iva = ingreso - (ingreso / 1.10)
-            base = ingreso - iva
-        else:
-            iva = ingreso - (ingreso / 1.10)
-            base = ingreso - iva
-        apply_v = props_rules.get(key, {}).get("honorarios_apply_vat", 1)
-        vat_local = props_rules.get(key, {}).get("honorarios_vat_pct", 21.0)
-        mult = 1.0 + (vat_local/100.0) if apply_v else 1.0
-        return base * pct * mult
+        iva = ingreso - (ingreso / 1.10)
+        base = ingreso - iva
+        return base * pct * 1.21
 
     def amenities(r):
-        key = _norm_key(r.get("Alojamiento",""))
-        return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
+        key = str(r.get("Alojamiento","")).strip().upper()
+        return float(case2_percent_amenities.get(key,(0.20,0.0))[1])
 
     out = df.copy()
     out["IVA del alquiler"] = pd.to_numeric(out["Ingreso alojamiento"], errors="coerce").fillna(0.0) - (pd.to_numeric(out["Ingreso alojamiento"], errors="coerce").fillna(0.0) / 1.10)
@@ -419,29 +352,26 @@ def process_case3(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
     out = df.copy()
 
     # Desglose de comisión del portal
-    comi_sin = pd.to_numeric(_as_series(out, "Comisión portal", default=0.0), errors="coerce").fillna(0.0).round(2)
+    comi_sin = pd.to_numeric(out.get("Comisión portal", 0.0), errors="coerce").fillna(0.0).round(2)
     out["Comisión portal (sin IVA)"] = comi_sin
     out["IVA comisión portal"] = (comi_sin * (float(vat_pct) / 100.0)).round(2)
     # “Comisión portal” pasa a ser CON IVA para que totales/pago recibido cuadren
     out["Comisión portal"] = (out["Comisión portal (sin IVA)"] + out["IVA comisión portal"]).round(2)
 
     def honorarios(r):
-        key = _norm_key(r.get("Alojamiento",""))
-        pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
-        # Nueva fórmula: (alojamiento - comisión SIN IVA) * pct * posible IVA de honorarios
+        key = str(r.get("Alojamiento","")).strip().upper()
+        pct = case3_cleaning_amenities.get(key,(0.20,0.0,0.0))[0]
+        # Nueva fórmula: (alojamiento - comisión SIN IVA) * 0.20 * 1.21
         base = float(r.get("Ingreso alojamiento",0.0)) - float(r.get("Comisión portal (sin IVA)",0.0))
-        apply_v = props_rules.get(key, {}).get("honorarios_apply_vat", 1)
-        vat_local = props_rules.get(key, {}).get("honorarios_vat_pct", 21.0)
-        mult = 1.0 + (vat_local/100.0) if apply_v else 1.0
-        return base * pct * mult
+        return base * pct * 1.21
 
     def gasto_limpieza(r):
-        key = _norm_key(r.get("Alojamiento",""))
-        return float(props_rules.get(key, {}).get("cleaning_fee", 0.0))
+        key = str(r.get("Alojamiento","")).strip().upper()
+        return float(case3_cleaning_amenities.get(key,(0.20,0.0,0.0))[1])
 
     def amenities(r):
-        key = _norm_key(r.get("Alojamiento",""))
-        return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
+        key = str(r.get("Alojamiento","")).strip().upper()
+        return float(case3_cleaning_amenities.get(key,(0.20,0.0,0.0))[2])
 
     out["Honorarios Florit"] = out.apply(honorarios, axis=1).round(2)
     out["Gasto limpieza"]   = out.apply(gasto_limpieza, axis=1).round(2)
@@ -511,20 +441,17 @@ def process_case5(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
     out["IVA del alquiler"] = ingreso - (ingreso / 1.10)
 
     def honorarios(r):
-        key = _norm_key(r.get("Alojamiento",""))
-        pct = props_rules.get(key, {}).get("honorarios_pct", 0.20)
+        key = str(r.get("Alojamiento","")).strip().upper()
+        pct = case5_percent_amenities.get(key,(0.20,0.0))[0]
         base = float(r.get("Ingreso alojamiento",0.0)) - float(r.get("IVA del alquiler",0.0)) - float(r.get("Comisión portal",0.0))
-        apply_v = props_rules.get(key, {}).get("honorarios_apply_vat", 1)
-        vat_local = props_rules.get(key, {}).get("honorarios_vat_pct", 21.0)
-        mult = 1.0 + (vat_local/100.0) if apply_v else 1.0
-        return base * pct * mult
+        return base * pct * 1.21
 
     def amenities(r):
-        key = _norm_key(r.get("Alojamiento",""))
-        return float(props_rules.get(key, {}).get("amenities_amount", 0.0))
+        key = str(r.get("Alojamiento","")).strip().upper()
+        return float(case5_percent_amenities.get(key,(0.20,0.0))[1])
 
     out["Honorarios Florit"] = out.apply(honorarios, axis=1).round(2)
-    out["Gasto limpieza"]   = pd.to_numeric(_as_series(out, "Ingreso limpieza", default=0.0), errors="coerce").fillna(0.0).round(2)
+    out["Gasto limpieza"]   = pd.to_numeric(out.get("Ingreso limpieza", 0.0), errors="coerce").fillna(0.0).round(2)
     out["Amenities"]        = out.apply(amenities, axis=1).round(2)
     out["Total Gastos"]     = (out[["Comisión portal","Honorarios Florit","Gasto limpieza","Amenities"]].sum(axis=1)).round(2)
     out["Pago al propietario"] = (out["Total ingresos"] - out["Total Gastos"]).round(2)
@@ -686,76 +613,20 @@ if generate:
     header_row = 1 if header_second_row else 0
     df_in = pd.read_excel(file, header=header_row)
     df_in = ensure_unique_columns(df_in)
-
-    # DEBUG eliminado: ya comprobada la lectura del Excel
-
     df_norm = normalize_columns_by_letters(df_in) if st.session_state.by_letters else normalize_columns(df_in)
     df_norm = ensure_unique_columns(df_norm)
     df_norm = normalize_liq_for_period(df_norm, start_date, end_date)
 
-    # Auto-detección: mapear a "Alojamiento" la columna con más coincidencias frente a props_rules
-    if "Alojamiento" not in df_norm.columns or df_norm["Alojamiento"].dropna().eq("").all():
-        keys = set(props_rules.keys())
-        candidates = []
-        for col in df_norm.columns:
-            if pd.api.types.is_string_dtype(df_norm[col]) or df_norm[col].dtype == object:
-                vals = df_norm[col].astype(str).str.strip().str.upper().unique()
-                common = len(set(vals) & keys)
-                if common > 0:
-                    candidates.append((col, common))
-        if candidates:
-            best_col, matches = max(candidates, key=lambda x: x[1])
-            df_norm.rename(columns={best_col: "Alojamiento"}, inplace=True)
-            st.info(f"Auto-detect: columna '{best_col}' mapeada a 'Alojamiento' ({matches} coincidencias)")
-
     if "Ingreso limpieza" in df_norm.columns:
-        limp = pd.to_numeric(_as_series(df_norm, "Ingreso limpieza"), errors="coerce").fillna(0)
+        limp = pd.to_numeric(df_norm["Ingreso limpieza"], errors="coerce").fillna(0)
         if (limp > 300).any():
             st.warning("Detectadas tarifas de limpieza > 300 €. Verifica que la columna L esté mapeada como 'Ingreso limpieza' o activa el modo por letras.")
 
     def run_case(case_no):
         df_case = df_norm.copy()
         props = props_for_case(case_no)
-
-        # diagnóstico: nombres presentes en el Excel antes de filtrar
-        orig_names = []
-        if "Alojamiento" in df_case.columns:
-            orig_names = sorted(df_case["Alojamiento"].dropna().unique())
-
         if props and "Alojamiento" in df_case.columns:
-            # función de comparación tolerante: normaliza, quita sufijo numérico y compara por igualdad/prefijo
-            def _strip_trail_num(s: str) -> str:
-                return re.sub(r"\s*\d+$", "", s).strip()
-
-            def matches_prop(v):
-                if v is None or str(v).strip() == "":
-                    return False
-                v = str(v)
-                # valores ya normalizados en df_case, props ya normalizados en props_rules
-                v_base = _strip_trail_num(v)
-                for p in props:
-                    if not p:
-                        continue
-                    # comparación exacta o por base/prefijo
-                    if p == v or p == v_base:
-                        return True
-                    if v.startswith(p + " ") or p.startswith(v + " "):
-                        return True
-                    # comparar también sin sufijo numérico en la regla (por si regla tiene número distinto)
-                    p_base = _strip_trail_num(p)
-                    if p_base == v_base or v_base.startswith(p_base) or p_base.startswith(v_base):
-                        return True
-                return False
-
-            mask = df_case["Alojamiento"].apply(matches_prop)
-            df_filtered = df_case[mask]
-            if df_filtered.shape[0] == 0:
-                sample = ", ".join(orig_names[:10]) + ("..." if len(orig_names) > 10 else "")
-                st.warning(f"Caso {case_no}: no se encontraron filas tras aplicar filtro por propiedades ({len(props)} reglas). Nombres detectados en el archivo: {sample}")
-                sample_rules = ", ".join(sorted(list(props))[:10]) + ("..." if len(props) > 10 else "")
-                st.caption(f"Ejemplo de reglas (Caso {case_no}): {sample_rules}")
-            df_case = df_filtered
-
+            df_case = df_case[df_case["Alojamiento"].isin(props)]
         vat_map = {1: vat_case1, 2: vat_case2, 3: vat_case3, 4: vat_case4, 5: vat_case5}
         if case_no == 2:
             out, warn = processors[case_no](df_case, treat_empty_as_booking=treat_empty_as_booking, skip_booking_vat=skip_booking_vat, vat_pct=vat_map[case_no], only_apolo=only_apolo_c2)
@@ -817,4 +688,3 @@ if generate:
         st.session_state["df_liq_label"] = f"Caso {case_no}"
         if warn > 0 and not treat_empty_as_booking:
             st.warning("Hay reservas con comisión > 0 pero portal vacío. Si deben ser Booking, marca ‘Tratar portal vacío como Booking’.")
-
