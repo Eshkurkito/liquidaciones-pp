@@ -707,7 +707,32 @@ if generate:
             orig_names = sorted(df_case["Alojamiento"].dropna().unique())
 
         if props and "Alojamiento" in df_case.columns:
-            df_filtered = df_case[df_case["Alojamiento"].isin(props)]
+            # función de comparación tolerante: normaliza, quita sufijo numérico y compara por igualdad/prefijo
+            def _strip_trail_num(s: str) -> str:
+                return re.sub(r"\s*\d+$", "", s).strip()
+
+            def matches_prop(v):
+                if v is None or str(v).strip() == "":
+                    return False
+                v = str(v)
+                # valores ya normalizados en df_case, props ya normalizados en props_rules
+                v_base = _strip_trail_num(v)
+                for p in props:
+                    if not p:
+                        continue
+                    # comparación exacta o por base/prefijo
+                    if p == v or p == v_base:
+                        return True
+                    if v.startswith(p + " ") or p.startswith(v + " "):
+                        return True
+                    # comparar también sin sufijo numérico en la regla (por si regla tiene número distinto)
+                    p_base = _strip_trail_num(p)
+                    if p_base == v_base or v_base.startswith(p_base) or p_base.startswith(v_base):
+                        return True
+                return False
+
+            mask = df_case["Alojamiento"].apply(matches_prop)
+            df_filtered = df_case[mask]
             if df_filtered.shape[0] == 0:
                 sample = ", ".join(orig_names[:10]) + ("..." if len(orig_names) > 10 else "")
                 st.warning(f"Caso {case_no}: no se encontraron filas tras aplicar filtro por propiedades ({len(props)} reglas). Nombres detectados en el archivo: {sample}")
@@ -776,13 +801,4 @@ if generate:
         st.session_state["df_liq_label"] = f"Caso {case_no}"
         if warn > 0 and not treat_empty_as_booking:
             st.warning("Hay reservas con comisión > 0 pero portal vacío. Si deben ser Booking, marca ‘Tratar portal vacío como Booking’.")
-
-def _normalize_name_for_key(s: str) -> str:
-    if s is None:
-        return ""
-    s = str(s).replace("\xa0", " ").strip()
-    s = re.sub(r"\s+", " ", s)
-    s = unicodedata.normalize("NFKD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    return s.upper().strip()
 
