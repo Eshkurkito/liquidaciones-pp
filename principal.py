@@ -366,6 +366,15 @@ if generate:
     df_norm = ensure_unique_columns(df_norm)
     df_norm = normalize_liq_for_period(df_norm, start_date, end_date)
 
+    # aplicar filtro por piso si hay selección
+    selected_pisos = st.session_state.get("filter_pisos", []) or []
+    if selected_pisos:
+        selected_norm = [s.strip().upper() for s in selected_pisos]
+        df_norm = df_norm[df_norm["Alojamiento"].isin(selected_norm)]
+        if df_norm.empty:
+            st.warning("No hay reservas para los pisos seleccionados en el período.")
+            st.stop()
+
     if RULES_MAP == {}:
         st.error("No se encontró reglas_apartamentos.csv o está vacío en la carpeta del script."); st.stop()
 
