@@ -4,7 +4,6 @@ from utils import normalize_columns, ensure_required, NIGHTS_COL
 
 def _cell_value(row: pd.Series, key, default=""):
     val = row.get(key, default)
-    # protect against unexpected Series/arrays
     if isinstance(val, (pd.Series, np.ndarray, list, tuple)):
         return default
     if pd.isna(val):
@@ -117,6 +116,17 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
         if c != NIGHTS_COL and pd.api.types.is_numeric_dtype(out[c]):
             out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0).round(2)
 
-    warn = int(((out.get("Portal",pd.Series([""]*len(out))).astype(str).str.strip() == "") & (out.get("Comisión portal",0.0) > 0)).sum())
+    # Ensure Portal and Comisión portal are treated as Series (handle duplicate column names)
+    if "Portal" in out.columns:
+        portal_series = out["Portal"]
+    else:
+        portal_series = pd.Series([""] * len(out), index=out.index)
+
+    com_series = out["Comisión portal"] if "Comisión portal" in out.columns else pd.Series([0.0] * len(out), index=out.index)
+
+    portal_stripped = portal_series.astype(str).str.strip()
+    com_numeric = pd.to_numeric(com_series, errors="coerce").fillna(0.0)
+
+    warn = int(((portal_stripped == "") & (com_numeric > 0)).sum())
 
     return out, warn
