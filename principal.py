@@ -224,9 +224,15 @@ RULES_MAP = load_rules_csv(None)
 
 # ---------- Procesador central: usa reglas por piso (CSV) ----------
 def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: float = 21.0):
+    """
+    Procesa fila a fila usando las reglas por apartment (rules_map).
+    Reproduce las fórmulas del BACK UP pero leyendo parámetros desde reglas_apartamentos.csv.
+    """
     df = normalize_columns(df)
     ensure_required(df, ["Alojamiento","Ingreso alojamiento","Total ingresos","Comisión portal","Portal"], "Procesar por reglas")
+
     out = df.copy()
+    # asegurar tipos básicos
     out["Ingreso alojamiento"] = pd.to_numeric(out.get("Ingreso alojamiento",0.0), errors="coerce").fillna(0.0)
     out["Ingreso limpieza"] = pd.to_numeric(out.get("Ingreso limpieza",0.0), errors="coerce").fillna(0.0)
     out["Comisión portal"] = pd.to_numeric(out.get("Comisión portal",0.0), errors="coerce").fillna(0.0)
@@ -235,17 +241,28 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
     def compute_row(r):
         prop = str(r.get("Alojamiento","")).strip().upper()
         rule = rules_map.get(prop, {})
-        ingreso = float(r.get("Ingreso alojamiento",0.0))
-        com_orig = float(r.get("Comisión portal",0.0))  # normalmente sin IVA en algunos ficheros
+
+        ingreso = float(r.get("Ingreso alojamiento", 0.0))
+        com_orig = float(r.get("Comisión portal", 0.0))
         portal = str(r.get("Portal","") or "").strip().lower()
 
-        # parámetros desde regla (con defaults)
+        # leer parámetros desde la regla (con defaults)
         honorarios_pct = float(rule.get("honorarios_pct") or 0.20)
         honorarios_apply_vat = bool(int(rule.get("honorarios_apply_vat") or 1))
         honorarios_vat_pct = float(rule.get("honorarios_vat_pct") or 21.0)
         amenities_amount = float(rule.get("amenities_amount") or 0.0)
-        cleaning_fee = rule.get("cleaning_fee")
-        cleaning_fee = float(cleaning_fee) if cleaning_fee not in (None,"") else float(r.get("Ingreso limpieza",0.0))
+
+        # cleaning_fee: si la regla especifica vacío o 0 -> usar "Ingreso limpieza" de la fila
+        cleaning_fee_raw = rule.get("cleaning_fee")
+        try:
+            cleaning_fee_val = float(cleaning_fee_raw) if cleaning_fee_raw not in (None, "") else None
+        except Exception:
+            cleaning_fee_val = None
+        if cleaning_fee_val in (None, 0.0):
+            cleaning_fee = float(r.get("Ingreso limpieza", 0.0))
+        else:
+            cleaning_fee = cleaning_fee_val
+
         compute_iva_alquiler = bool(int(rule.get("compute_iva_alquiler") or 0))
         commission_vat_pct = float(rule.get("commission_vat_pct") if rule.get("commission_vat_pct") not in (None,"") else default_commission_vat)
         treat_empty = bool(int(rule.get("treat_empty_portal_as_booking") or 0))
@@ -253,207 +270,6 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
         split_comm = bool(int(rule.get("split_commission") or 0))
         hon_base_excl_com = bool(int(rule.get("hon_base_exclude_commission") or 0))
 
-        # ---- comportamiento comisión ----
+        # ---- cálculo comisión (mismas reglas que BACK UP) ----
         is_booking = "booking" in portal
         is_empty = portal == ""
-
-        # por defecto: com_sin_iva = com_orig
-        com_sin_iva = com_orig
-        iva_com = 0.0
-        com_total = com_orig
-
-        # Si NO pedimos desglose (split) aplicamos IVA a comisión solo si es booking (o empty+flag) y no skip
-        if not split_comm:
-            if (is_booking or (is_empty and treat_empty)) and commission_vat_pct > 0 and (not skip_booking):
-                iva_com = com_orig * (commission_vat_pct / 100.0)
-                com_total = com_orig + iva_com
-            else:
-                com_total = com_orig
-        else:
-            # Si pedimos 'split' (como Caso 3 del backup) reproducir lógica del backup:
-            # - com_sin_iva = com_orig
-            # - IVA comisión = com_sin_iva * vat (NO condicionada solo a booking)
-            # - Comisión total = com_sin_iva + IVA comisión
-            iva_com = com_orig * (commission_vat_pct / 100.0) if commission_vat_pct > 0 else 0.0
-            com_total = com_sin_iva + iva_com
-
-        # ---- IVA del alquiler si aplica ----
-        iva_alq = (ingreso - (ingreso / 1.10)) if compute_iva_alquiler else 0.0
-
-        # ---- base para honorarios ----
-        base = ingreso
-        if hon_base_excl_com:
-            # mantener semántica: excluir comisión SIN IVA de la base
-            base = ingreso - com_sin_iva
-
-        # calcular honorarios (con/sin IVA sobre honorarios según regla)
-        if honorarios_apply_vat and honorarios_vat_pct:
-            honorarios = base * honorarios_pct * (1 + honorarios_vat_pct/100.0)
-        else:
-            honorarios = base * honorarios_pct
-
-        gasto_limpieza = cleaning_fee
-        total_gastos = round(com_total + honorarios + gasto_limpieza + amenities_amount, 2)
-        pago_prop = round(float(r.get("Total ingresos",0.0)) - total_gastos, 2)
-        pago_recibido = round(float(r.get("Total ingresos",0.0)) - com_total, 2)
-
-        # construir serie resultado, incluir desglose si split_comm
-        res = {
-            "Comisión portal": round(com_total,2),
-            "Honorarios Florit": round(honorarios,2),
-            "Gasto limpieza": round(gasto_limpieza,2),
-            "Amenities": round(amenities_amount,2),
-            "Total Gastos": total_gastos,
-            "Pago al propietario": pago_prop,
-            "Pago recibido": pago_recibido
-        }
-        if compute_iva_alquiler:
-            res["IVA del alquiler"] = round(iva_alq,2)
-        else:
-            res["IVA del alquiler"] = None
-
-        if split_comm:
-            res["Comisión portal (sin IVA)"] = round(com_sin_iva,2)
-            res["IVA comisión portal"] = round(iva_com,2)
-
-        return pd.Series(res)
-
-    computed = out.apply(compute_row, axis=1)
-    out.update(computed)
-
-    # Asegurar que las columnas calculadas por reglas existen y son numéricas
-    expected_calc_cols = [
-        "Comisión portal (sin IVA)", "IVA comisión portal", "Comisión portal",
-        "Honorarios Florit", "Gasto limpieza", "Amenities",
-        "Total Gastos", "Pago al propietario", "Pago recibido", "IVA del alquiler"
-    ]
-    for col in expected_calc_cols:
-        if col in out.columns:
-            out[col] = pd.to_numeric(out[col], errors="coerce").fillna(0.0).round(2)
-
-    # Normalizar resto de columnas numéricas (mantener compatibilidad con BACK UP)
-    for c in out.columns:
-        if c != NIGHTS_COL and pd.api.types.is_numeric_dtype(out[c]):
-            out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0).round(2)
-    return out, 0
-
-# ---------- Export Excel (sin cambios) ----------
-BORDER_THIN = Border(left=Side(style="thin"), right=Side(style="thin"),
-                     top=Side(style="thin"), bottom=Side(style="thin"))
-
-def write_grouped_sheet(ws, df):
-    cols = list(df.columns)
-    def write_table(start_row, subdf):
-        for j, col in enumerate(cols, start=1):
-            cell = ws.cell(row=start_row, column=j, value=col)
-            cell.font = Font(bold=True); cell.border = BORDER_THIN
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        for i, (_, row) in enumerate(subdf.iterrows(), start=1):
-            for j, col in enumerate(cols, start=1):
-                val = row[col]; c = ws.cell(row=start_row+i, column=j, value=val); c.border = BORDER_THIN
-                if isinstance(val, (int, float)) and not pd.isna(val):
-                    if is_nights_col(col): c.number_format = "0"
-                    elif is_money_col(col): c.number_format = '#.##0,00" €"'
-                    else: c.number_format = "#.##0,00"
-                else:
-                    c.alignment = Alignment(wrap_text=True)
-        sum_row = start_row + len(subdf) + 1
-        ws.cell(row=sum_row, column=1, value="TOTAL").font = Font(bold=True); ws.cell(row=sum_row, column=1).border = BORDER_THIN
-        for j, col in enumerate(cols, start=1):
-            if j == 1: continue
-            if pd.api.types.is_numeric_dtype(subdf[col]):
-                top = start_row+1; bottom = start_row+len(subdf)
-                formula = f"=SUM({get_column_letter(j)}{top}:{get_column_letter(j)}{bottom})"
-                c = ws.cell(row=sum_row, column=j, value=formula); c.font = Font(bold=True); c.border = BORDER_THIN
-                if is_nights_col(col): c.number_format = "0"
-                elif is_money_col(col): c.number_format = '#.##0,00" €"'
-                else: c.number_format = "#.##0,00"
-            else:
-                ws.cell(row=sum_row, column=j, value="").border = BORDER_THIN
-        return sum_row + 2
-    current_row = 1
-    if "Alojamiento" in df.columns:
-        for aloj, subdf in df.groupby("Alojamiento"):
-            ws.cell(row=current_row, column=1, value=str(aloj)).font = Font(bold=True, size=12)
-            current_row += 1
-            current_row = write_table(current_row, subdf)
-    else:
-        current_row = write_table(current_row, df)
-    for j, col in enumerate(cols, start=1):
-        max_len = len(str(col))
-        for r in range(1, ws.max_row+1):
-            v = ws.cell(row=r, column=j).value
-            if v is not None: max_len = max(max_len, len(str(v)))
-        ws.column_dimensions[get_column_letter(j)].width = min(max_len+2, 45)
-
-def build_excel_single(df_final, filename="Liquidacion.xlsx"):
-    wb = Workbook(); ws = wb.active; ws.title = "Liquidación"
-    write_grouped_sheet(ws, df_final)
-    bio = BytesIO(); wb.save(bio); bio.seek(0)
-    st.download_button("📥 Descargar Excel (Liquidación)", bio.getvalue(),
-                       file_name=filename,
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-# ---------- UI ----------
-st.title("📊 LIQUIDACIONES (por reglas CSV)")
-st.caption("Genera liquidaciones usando reglas por piso desde reglas_apartamentos.csv")
-
-with st.sidebar:
-    st.header("Parámetros")
-    c1, c2 = st.columns(2)
-    with c1:
-        start_date = st.date_input("Desde", value=date(date.today().year, date.today().month, 1))
-    with c2:
-        end_date = st.date_input("Hasta", value=date(date.today().year, date.today().month, 28))
-    st.divider()
-    st.checkbox("Lectura por letras (fallback)", value=False, key="by_letters")
-    use_rules = st.checkbox("Usar reglas CSV (reglas_apartamentos.csv) - calcular por piso", value=True, key="use_rules_csv")
-    st.divider()
-    # filtro por piso (lista desde el CSV de reglas)
-    pisos_options = sorted(RULES_MAP.keys()) if RULES_MAP else []
-    st.multiselect("Filtrar por piso (Alojamiento)", options=pisos_options, key="filter_pisos")
-    header_second_row = st.checkbox("La cabecera está en la segunda fila (leer desde la fila 2)", value=False)
-    generate = st.button("Generar liquidación")
-
-file = st.file_uploader("Sube el archivo de reservas (.xlsx)", type=["xlsx"], key="reservas_upl")
-
-def normalize_liq_for_period(df_norm, start_date, end_date):
-    if "Fecha entrada" in df_norm.columns:
-        mask = (df_norm["Fecha entrada"] >= pd.to_datetime(start_date)) & (df_norm["Fecha entrada"] <= pd.to_datetime(end_date))
-        df_norm = df_norm[mask]
-    return df_norm
-
-if generate:
-    if not file:
-        st.error("Sube primero el archivo de reservas (.xlsx)."); st.stop()
-    if not use_rules:
-        st.error("La aplicación ahora exige 'Usar reglas CSV'. Activa la opción y vuelve a generar."); st.stop()
-
-    header_row = 1 if header_second_row else 0
-    df_in = pd.read_excel(file, header=header_row)
-    df_in = ensure_unique_columns(df_in)
-    df_norm = normalize_columns_by_letters(df_in) if st.session_state.by_letters else normalize_columns(df_in)
-    df_norm = ensure_unique_columns(df_norm)
-    df_norm = normalize_liq_for_period(df_norm, start_date, end_date)
-
-    # aplicar filtro por piso si hay selección
-    selected_pisos = st.session_state.get("filter_pisos", []) or []
-    if selected_pisos:
-        selected_norm = [s.strip().upper() for s in selected_pisos]
-        df_norm = df_norm[df_norm["Alojamiento"].isin(selected_norm)]
-        if df_norm.empty:
-            st.warning("No hay reservas para los pisos seleccionados en el período.")
-            st.stop()
-
-    if RULES_MAP == {}:
-        st.error("No se encontró reglas_apartamentos.csv o está vacío en la carpeta del script."); st.stop()
-
-    df_out, warn = process_by_rules(df_norm, RULES_MAP)
-    sort_cols = [c for c in ["Alojamiento","Fecha entrada"] if c in df_out.columns]
-    if sort_cols: df_out = df_out.sort_values(by=sort_cols)
-    st.success(f"Liquidación generada (Por reglas CSV) • {start_date.strftime('%d/%m/%Y')}–{end_date.strftime('%d/%m/%Y')}")
-    show_table_es_grouped(df_out, "Tabla de liquidaciones (por reglas)")
-    file_case_name = f"Liquidacion_REGLAS_CSV_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx"
-    build_excel_single(df_out, filename=file_case_name)
-    st.session_state["df_liq_all"] = df_out.copy()
-    st.session_state["df_liq_label"] = "Por reglas CSV"
