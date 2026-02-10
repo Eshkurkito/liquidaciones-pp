@@ -118,7 +118,7 @@ LETTER_MAP_DEFAULT = {
     "F": "Fecha salida",
     "H": "Noches ocupadas",
     "I": "Ingreso alojamiento",
-    "J/L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
+    "L": "Ingreso limpieza",    # mapeo fuerte: tarifa limpieza en L
     "O": "Total ingresos",
     "AP": "Portal",
     "AR": "Comisión portal",
@@ -463,4 +463,226 @@ def process_case5(df, treat_empty_as_booking=False, skip_booking_vat=False, vat_
 
 processors = {1: process_case1, 2: process_case2, 3: process_case3, 4: process_case4, 5: process_case5}
 
-# --- Nuevo: cargar reglas por piso desde CSV ---
+# ========= Exportación Excel =========
+BORDER_THIN = Border(left=Side(style="thin"), right=Side(style="thin"),
+                     top=Side(style="thin"), bottom=Side(style="thin"))
+
+def write_grouped_sheet(ws, df):
+    cols = list(df.columns)
+
+    def write_table(start_row, subdf):
+        # Cabecera
+        for j, col in enumerate(cols, start=1):
+            cell = ws.cell(row=start_row, column=j, value=col)
+            cell.font = Font(bold=True)
+            cell.border = BORDER_THIN
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        # Filas
+        for i, (_, row) in enumerate(subdf.iterrows(), start=1):
+            for j, col in enumerate(cols, start=1):
+                val = row[col]
+                c = ws.cell(row=start_row+i, column=j, value=val)
+                c.border = BORDER_THIN
+                if isinstance(val, (int, float)) and not pd.isna(val):
+                    if is_nights_col(col):
+                        c.number_format = "0"
+                    elif is_money_col(col):
+                        c.number_format = '#.##0,00" €"'
+                    else:
+                        c.number_format = "#.##0,00"
+                else:
+                    c.alignment = Alignment(wrap_text=True)
+        # Sumatorios en negrita
+        sum_row = start_row + len(subdf) + 1
+        ws.cell(row=sum_row, column=1, value="TOTAL").font = Font(bold=True)
+        ws.cell(row=sum_row, column=1).border = BORDER_THIN
+        for j, col in enumerate(cols, start=1):
+            if j == 1:
+                continue
+            if pd.api.types.is_numeric_dtype(subdf[col]):
+                top = start_row+1
+                bottom = start_row+len(subdf)
+                formula = f"=SUM({get_column_letter(j)}{top}:{get_column_letter(j)}{bottom})"
+                c = ws.cell(row=sum_row, column=j, value=formula)
+                c.font = Font(bold=True)
+                c.border = BORDER_THIN
+                if is_nights_col(col):
+                    c.number_format = "0"
+                elif is_money_col(col):
+                    c.number_format = '#.##0,00" €"'
+                else:
+                    c.number_format = "#.##0,00"
+            else:
+                ws.cell(row=sum_row, column=j, value="").border = BORDER_THIN
+        return sum_row + 2
+
+    current_row = 1
+    if "Alojamiento" in df.columns:
+        for aloj, subdf in df.groupby("Alojamiento"):
+            ws.cell(row=current_row, column=1, value=str(aloj)).font = Font(bold=True, size=12)
+            current_row += 1
+            current_row = write_table(current_row, subdf)
+    else:
+        current_row = write_table(current_row, df)
+
+    # Auto-ancho
+    for j, col in enumerate(cols, start=1):
+        max_len = len(str(col))
+        for r in range(1, ws.max_row+1):
+            v = ws.cell(row=r, column=j).value
+            if v is not None:
+                max_len = max(max_len, len(str(v)))
+        ws.column_dimensions[get_column_letter(j)].width = min(max_len+2, 45)
+
+def build_excel_single(df_final, filename="Liquidacion.xlsx"):
+    wb = Workbook(); ws = wb.active; ws.title = "Liquidación"
+    write_grouped_sheet(ws, df_final)
+    bio = BytesIO(); wb.save(bio); bio.seek(0)
+    st.download_button("📥 Descargar Excel (Liquidación)", bio.getvalue(),
+                       file_name=filename,
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+def build_excel_multi(dfs_by_case: dict, filename: str):
+    wb = Workbook(); first = True
+    for case_label, df_final in dfs_by_case.items():
+        if first:
+            ws = wb.active; ws.title = case_label; first = False
+        else:
+            ws = wb.create_sheet(title=case_label)
+        write_grouped_sheet(ws, df_final)
+    bio = BytesIO(); wb.save(bio); bio.seek(0)
+    st.download_button("📥 Descargar Excel (Todos los casos)", bio.getvalue(),
+                       file_name=filename,
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+# ========= UI: LIQUIDACIONES =========
+st.title("📊 LIQUIDACIONES (Casos 1–5)")
+st.caption("Primero genera las liquidaciones del período. Luego sube el extracto bancario y concilia.")
+
+with st.sidebar:
+    st.header("Parámetros de liquidación")
+    c1, c2 = st.columns(2)
+    with c1:
+        start_date = st.date_input("Desde", value=date(date.today().year, date.today().month, 1))
+    with c2:
+        end_date   = st.date_input("Hasta",  value=date(date.today().year, date.today().month, 28))
+    st.divider()
+    case_choice = st.radio("Caso", ["Todos", 1,2,3,4,5], horizontal=False)
+    st.checkbox("Lectura por letras (fallback)", value=False, key="by_letters")
+    st.caption("Mapeo: W, D, F, H, I, J/L (L limpia), O, AP, AR, AL.")
+    st.divider()
+
+    # Ajustes adicionales ocultables con "ojito"
+    with st.expander("👁️ Ajustes adicionales", expanded=False):
+        st.subheader("IVA comisión por caso (Booking)")
+        col_v1, col_v2 = st.columns(2)
+        with col_v1:
+            vat_case1 = st.number_input("Caso 1 (%)", min_value=0.0, max_value=30.0, value=21.0, step=0.5)
+            vat_case3 = st.number_input("Caso 3 (%)", min_value=0.0, max_value=30.0, value=21.0, step=0.5)
+            vat_case5 = st.number_input("Caso 5 (%)", min_value=0.0, max_value=30.0, value=0.0, step=0.5)
+        with col_v2:
+            vat_case2 = st.number_input("Caso 2 (%)", min_value=0.0, max_value=30.0, value=21.0, step=0.5)
+            vat_case4 = st.number_input("Caso 4 (%)", min_value=0.0, max_value=30.0, value=0.0, step=0.5)
+            only_apolo_c2 = st.checkbox("Caso 2: aplicar solo a APOLO 029/197", value=True)
+        treat_empty_as_booking = st.checkbox("Tratar portal vacío como Booking (aplicar IVA comisión)", value=False)
+        skip_booking_vat = st.checkbox("No añadir IVA a comisión de Booking (ya viene con IVA)", value=False)
+
+    generate = st.button("Generar liquidación")
+
+# Nuevo: opción para indicar que la cabecera del Excel está en la fila 2
+header_second_row = st.checkbox("La cabecera está en la segunda fila (leer desde la fila 2)", value=False)
+
+file = st.file_uploader("Sube el archivo de reservas (.xlsx)", type=["xlsx"], key="reservas_upl")
+
+# ========= Generación Liquidaciones =========
+def normalize_liq_for_period(df_norm, start_date, end_date):
+    if "Fecha entrada" in df_norm.columns:
+        mask = (df_norm["Fecha entrada"] >= pd.to_datetime(start_date)) & (df_norm["Fecha entrada"] <= pd.to_datetime(end_date))
+        df_norm = df_norm[mask]
+    return df_norm
+
+if generate:
+    if not file:
+        st.error("Sube primero el archivo de reservas (.xlsx).")
+        st.stop()
+
+    header_row = 1 if header_second_row else 0
+    df_in = pd.read_excel(file, header=header_row)
+    df_in = ensure_unique_columns(df_in)
+    df_norm = normalize_columns_by_letters(df_in) if st.session_state.by_letters else normalize_columns(df_in)
+    df_norm = ensure_unique_columns(df_norm)
+    df_norm = normalize_liq_for_period(df_norm, start_date, end_date)
+
+    if "Ingreso limpieza" in df_norm.columns:
+        limp = pd.to_numeric(df_norm["Ingreso limpieza"], errors="coerce").fillna(0)
+        if (limp > 300).any():
+            st.warning("Detectadas tarifas de limpieza > 300 €. Verifica que la columna L esté mapeada como 'Ingreso limpieza' o activa el modo por letras.")
+
+    def run_case(case_no):
+        df_case = df_norm.copy()
+        props = props_for_case(case_no)
+        if props and "Alojamiento" in df_case.columns:
+            df_case = df_case[df_case["Alojamiento"].isin(props)]
+        vat_map = {1: vat_case1, 2: vat_case2, 3: vat_case3, 4: vat_case4, 5: vat_case5}
+        if case_no == 2:
+            out, warn = processors[case_no](df_case, treat_empty_as_booking=treat_empty_as_booking, skip_booking_vat=skip_booking_vat, vat_pct=vat_map[case_no], only_apolo=only_apolo_c2)
+        elif case_no in (1,3,4,5):
+            out, warn = processors[case_no](df_case, treat_empty_as_booking=treat_empty_as_booking, skip_booking_vat=skip_booking_vat, vat_pct=vat_map[case_no])
+        else:
+            out, warn = processors[case_no](df_case)
+        if NIGHTS_COL in out.columns:
+            out[NIGHTS_COL] = pd.to_numeric(out[NIGHTS_COL], errors="coerce").fillna(0).round(0).astype(int)
+        for c in out.columns:
+            if c != NIGHTS_COL and pd.api.types.is_numeric_dtype(out[c]):
+                out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0).round(2)
+        return out, warn
+
+    if case_choice == "Todos":
+        dfs = {}; total_warns = 0
+        for c in [1,2,3,4,5]:
+            df_out, warn = run_case(c)
+            total_warns += warn
+            df_out = df_out.sort_values(by=[col for col in ["Alojamiento","Fecha entrada"] if col in df_out.columns])
+            dfs[f"Caso {c}"] = df_out
+        st.success(f"Liquidación generada (Todos) • {start_date.strftime('%d/%m/%Y')}–{end_date.strftime('%d/%m/%Y')}")
+
+        for label, df_show in dfs.items():
+            show_table_es_grouped(df_show, f"{label} — Tabla de liquidaciones")
+
+        file_name = f"Liquidaciones_TODOS_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx"
+        build_excel_multi(dfs, filename=file_name)
+
+        st.session_state["df_liq_all"] = pd.concat(dfs.values(), ignore_index=True, sort=False)
+        st.session_state["df_liq_label"] = "Todos"
+        if total_warns > 0 and not treat_empty_as_booking:
+            st.warning(f"Hay {total_warns} reservas con comisión > 0 pero portal vacío en alguno de los casos. Si deben ser Booking, marca la opción correspondiente y vuelve a generar.")
+    else:
+        case_no = int(case_choice)
+        df_out, warn = run_case(case_no)
+        df_out = df_out.sort_values(by=[col for col in ["Alojamiento","Fecha entrada"] if col in df_out.columns])
+
+        st.success(f"Liquidación generada (Caso {case_no}) • {start_date.strftime('%d/%m/%Y')}–{end_date.strftime('%d/%m/%Y')}")
+        show_table_es_grouped(df_out, "Tabla de liquidaciones")
+
+        aloj_col = find_col(df_out, "Alojamiento")
+        pago_col = find_col(df_out, "Pago al propietario")
+        if aloj_col is not None and pago_col is not None:
+            pagos = (df_out[[aloj_col, pago_col]].groupby(aloj_col, as_index=False)[pago_col]
+                     .sum().round(2).sort_values(aloj_col))
+            pagos.rename(columns={aloj_col: "Alojamiento", pago_col: "Pago al propietario"}, inplace=True)
+            pagos_fmt = pagos.copy()
+            for c in pagos_fmt.columns:
+                if pd.api.types.is_numeric_dtype(pagos_fmt[c]) or is_money_col(c):
+                    pagos_fmt[c] = pagos_fmt[c].apply(lambda v: fmt_number_for_ui(c, v))
+            st.subheader("💸 Pagos por alojamiento (suma)")
+            st.dataframe(pagos_fmt, use_container_width=True)
+
+        file_case_name = f"Liquidacion_CASO{case_no}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx"
+        build_excel_single(df_out, filename=file_case_name)
+
+        st.session_state["df_liq_all"] = df_out.copy()
+        st.session_state["df_liq_label"] = f"Caso {case_no}"
+        if warn > 0 and not treat_empty_as_booking:
+            st.warning("Hay reservas con comisión > 0 pero portal vacío. Si deben ser Booking, marca ‘Tratar portal vacío como Booking’.")
+
+st.divider()
