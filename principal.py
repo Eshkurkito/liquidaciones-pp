@@ -573,6 +573,7 @@ with st.sidebar:
     st.divider()
     case_choice = st.radio("Caso", ["Todos", 1,2,3,4,5], horizontal=False)
     st.checkbox("Lectura por letras (fallback)", value=False, key="by_letters")
+    st.checkbox("Usar reglas CSV (reglas_apartamentos.csv) - calcular por piso", value=True, key="use_rules_csv")
     st.caption("Mapeo: W, D, F, H, I, J/L (L limpia), O, AP, AR, AL.")
     st.divider()
 
