@@ -647,6 +647,21 @@ if generate:
     df_norm = ensure_unique_columns(df_norm)
     df_norm = normalize_liq_for_period(df_norm, start_date, end_date)
 
+    # Auto-detección: mapear a "Alojamiento" la columna con más coincidencias frente a props_rules
+    if "Alojamiento" not in df_norm.columns or df_norm["Alojamiento"].dropna().eq("").all():
+        keys = set(props_rules.keys())
+        candidates = []
+        for col in df_norm.columns:
+            if pd.api.types.is_string_dtype(df_norm[col]) or df_norm[col].dtype == object:
+                vals = df_norm[col].astype(str).str.strip().str.upper().unique()
+                common = len(set(vals) & keys)
+                if common > 0:
+                    candidates.append((col, common))
+        if candidates:
+            best_col, matches = max(candidates, key=lambda x: x[1])
+            df_norm.rename(columns={best_col: "Alojamiento"}, inplace=True)
+            st.info(f"Auto-detect: columna '{best_col}' mapeada a 'Alojamiento' ({matches} coincidencias)")
+
     if "Ingreso limpieza" in df_norm.columns:
         limp = pd.to_numeric(df_norm["Ingreso limpieza"], errors="coerce").fillna(0)
         if (limp > 300).any():
@@ -731,3 +746,4 @@ if generate:
         st.session_state["df_liq_label"] = f"Caso {case_no}"
         if warn > 0 and not treat_empty_as_booking:
             st.warning("Hay reservas con comisión > 0 pero portal vacío. Si deben ser Booking, marca ‘Tratar portal vacío como Booking’.")
+
