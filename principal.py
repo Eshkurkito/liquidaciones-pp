@@ -213,9 +213,10 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
         prop = str(r.get("Alojamiento","")).strip().upper()
         rule = rules_map.get(prop, {})
         ingreso = float(r.get("Ingreso alojamiento",0.0))
-        com = float(r.get("Comisión portal",0.0))
+        com_orig = float(r.get("Comisión portal",0.0))  # normalmente sin IVA en algunos ficheros
         portal = str(r.get("Portal","") or "").strip().lower()
 
+        # parámetros desde regla (con defaults)
         honorarios_pct = float(rule.get("honorarios_pct") or 0.20)
         honorarios_apply_vat = bool(int(rule.get("honorarios_apply_vat") or 1))
         honorarios_vat_pct = float(rule.get("honorarios_vat_pct") or 21.0)
@@ -226,39 +227,74 @@ def process_by_rules(df: pd.DataFrame, rules_map: dict, default_commission_vat: 
         commission_vat_pct = float(rule.get("commission_vat_pct") if rule.get("commission_vat_pct") not in (None,"") else default_commission_vat)
         treat_empty = bool(int(rule.get("treat_empty_portal_as_booking") or 0))
         skip_booking = bool(int(rule.get("skip_booking_vat") or 0))
+        split_comm = bool(int(rule.get("split_commission") or 0))
         hon_base_excl_com = bool(int(rule.get("hon_base_exclude_commission") or 0))
 
+        # ---- aplicar IVA a la comisión (si procede) ----
         is_booking = "booking" in portal
         is_empty = portal == ""
+        com_sin_iva = com_orig
+        iva_com = 0.0
+        # si debemos añadir IVA a la comisión (booking / empty+flag) y no está marcado skip
         if (is_booking or (is_empty and treat_empty)) and commission_vat_pct > 0 and (not skip_booking):
-            com = com * (1 + commission_vat_pct/100.0)
+            # com_orig suele venir SIN IVA; añadir IVA opcionalmente
+            iva_com = com_orig * (commission_vat_pct / 100.0)
+            com_total = com_orig + iva_com
+        else:
+            com_total = com_orig
 
-        iva_alq = ingreso - (ingreso / 1.10) if compute_iva_alquiler else 0.0
+        # Si la regla indica que queremos 'split' (desglose) => exponer columnas (sin IVA + IVA) y usar lógica tipo Caso 3
+        if split_comm:
+            # mantener com_sin_iva como la base original y com_total con IVA añadido si aplica
+            # si commission_vat_pct==0 entonces iva_com será 0
+            com_sin_iva = com_orig
+            iva_com = com_orig * (commission_vat_pct / 100.0) if commission_vat_pct > 0 and not skip_booking else 0.0
+            com_total = com_sin_iva + iva_com
+        else:
+            # si no split pero aplicamos IVA globalmente ya lo hicimos arriba (com_total)
+            pass
 
+        # ---- IVA del alquiler si aplica ----
+        iva_alq = (ingreso - (ingreso / 1.10)) if compute_iva_alquiler else 0.0
+
+        # ---- base para honorarios ----
         base = ingreso
         if hon_base_excl_com:
-            base = ingreso - com
+            # decidir si excluir com_sin_iva o com_total; mantener la semántica original: excluir comisión SIN IVA
+            base = ingreso - com_sin_iva
 
+        # calcular honorarios (con/sin IVA sobre honorarios según regla)
         if honorarios_apply_vat and honorarios_vat_pct:
             honorarios = base * honorarios_pct * (1 + honorarios_vat_pct/100.0)
         else:
             honorarios = base * honorarios_pct
 
         gasto_limpieza = cleaning_fee
-        total_gastos = round(com + honorarios + gasto_limpieza + amenities_amount, 2)
+        total_gastos = round(com_total + honorarios + gasto_limpieza + amenities_amount, 2)
         pago_prop = round(float(r.get("Total ingresos",0.0)) - total_gastos, 2)
-        pago_recibido = round(float(r.get("Total ingresos",0.0)) - com, 2)
+        pago_recibido = round(float(r.get("Total ingresos",0.0)) - com_total, 2)
 
-        return pd.Series({
-            "Comisión portal": round(com,2),
+        # construir serie resultado, incluir desglose si split_comm
+        res = {
+            "Comisión portal": round(com_total,2),
             "Honorarios Florit": round(honorarios,2),
             "Gasto limpieza": round(gasto_limpieza,2),
             "Amenities": round(amenities_amount,2),
             "Total Gastos": total_gastos,
             "Pago al propietario": pago_prop,
-            "Pago recibido": pago_recibido,
-            "IVA del alquiler": round(iva_alq,2) if compute_iva_alquiler else None
-        })
+            "Pago recibido": pago_recibido
+        }
+        if compute_iva_alquiler:
+            res["IVA del alquiler"] = round(iva_alq,2)
+        else:
+            # dejar None para que el código anterior normalice a 0.0 si procede
+            res["IVA del alquiler"] = None
+
+        if split_comm:
+            res["Comisión portal (sin IVA)"] = round(com_sin_iva,2)
+            res["IVA comisión portal"] = round(iva_com,2)
+
+        return pd.Series(res)
 
     computed = out.apply(compute_row, axis=1)
     out.update(computed)
