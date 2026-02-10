@@ -339,6 +339,9 @@ with st.sidebar:
     st.checkbox("Lectura por letras (fallback)", value=False, key="by_letters")
     use_rules = st.checkbox("Usar reglas CSV (reglas_apartamentos.csv) - calcular por piso", value=True, key="use_rules_csv")
     st.divider()
+    # filtro por piso (lista desde el CSV de reglas)
+    pisos_options = sorted(RULES_MAP.keys()) if RULES_MAP else []
+    st.multiselect("Filtrar por piso (Alojamiento)", options=pisos_options, key="filter_pisos")
     header_second_row = st.checkbox("La cabecera está en la segunda fila (leer desde la fila 2)", value=False)
     generate = st.button("Generar liquidación")
 
