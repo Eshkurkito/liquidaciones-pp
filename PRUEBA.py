@@ -270,18 +270,45 @@ def build_excel(df):
     ws = wb.active
     ws.title = "Liquidación"
 
-    for col_idx, col in enumerate(df.columns, 1):
-        ws.cell(row=1, column=col_idx, value=col).font = Font(bold=True)
+    row_cursor = 1
 
-    for row_idx, row in enumerate(df.itertuples(index=False), 2):
-        for col_idx, value in enumerate(row, 1):
-            ws.cell(row=row_idx, column=col_idx, value=value)
+    for aloj, subdf in df.groupby("Alojamiento"):
+
+        # Título apartamento
+        ws.cell(row=row_cursor, column=1, value=aloj).font = Font(bold=True)
+        row_cursor += 1
+
+        cols = list(subdf.columns)
+
+        # Cabecera
+        for col_idx, col in enumerate(cols, 1):
+            ws.cell(row=row_cursor, column=col_idx, value=col).font = Font(bold=True)
+
+        row_cursor += 1
+
+        # Reservas
+        for _, row in subdf.iterrows():
+            for col_idx, col in enumerate(cols, 1):
+                ws.cell(row=row_cursor, column=col_idx, value=row[col])
+            row_cursor += 1
+
+        # Fila TOTAL
+        for col_idx, col in enumerate(cols, 1):
+            if pd.api.types.is_numeric_dtype(subdf[col]):
+                total_value = subdf[col].sum()
+                ws.cell(row=row_cursor, column=col_idx, value=total_value).font = Font(bold=True)
+            else:
+                if col == "Fecha entrada":
+                    ws.cell(row=row_cursor, column=col_idx, value="TOTAL").font = Font(bold=True)
+
+        row_cursor += 2  # Espacio entre apartamentos
 
     bio = BytesIO()
     wb.save(bio)
     bio.seek(0)
 
     return bio
+
 
 
 # =====================================================
@@ -314,7 +341,27 @@ if st.button("Generar liquidación"):
     df_final = process_dynamic(df_res, reglas)
 
     st.success("Liquidación generada correctamente.")
-    st.dataframe(df_final, use_container_width=True)
+    for aloj, subdf in df_final.groupby("Alojamiento"):
+        st.subheader(f"🏠 {aloj}")
+
+    block = subdf.copy()
+
+    # Crear fila TOTAL
+    total_row = {}
+
+    for col in block.columns:
+        if pd.api.types.is_numeric_dtype(block[col]):
+            total_row[col] = block[col].sum()
+        else:
+            total_row[col] = ""
+
+    total_row["Fecha entrada"] = "TOTAL"
+
+    block = pd.concat([block, pd.DataFrame([total_row])], ignore_index=True)
+
+    st.dataframe(block, use_container_width=True)
+    st.divider()
+
 
     excel_file = build_excel(df_final)
 
