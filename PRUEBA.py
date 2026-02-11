@@ -6,43 +6,29 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
-st.set_page_config(
-    page_title="Liquidaciones dinámicas",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="Liquidaciones dinámicas", page_icon="📊", layout="wide")
 
 # =====================================================
-# CARGA REGLAS (AUTODETECTA SEPARADOR)
+# CARGA REGLAS CSV (AUTODETECTA SEPARADOR)
 # =====================================================
 
 @st.cache_data
 def load_reglas():
     try:
-        reglas = pd.read_csv(
-            "reglas_apartamentos.csv",
-            sep=None,
-            engine="python"
-        )
+        reglas = pd.read_csv("reglas_apartamentos.csv", sep=None, engine="python")
     except FileNotFoundError:
-        st.error("❌ No se encuentra reglas_apartamentos.csv en el repositorio.")
+        st.error("No se encuentra reglas_apartamentos.csv en el repositorio.")
         st.stop()
 
     reglas.columns = reglas.columns.str.strip()
 
     if "Property" not in reglas.columns:
-        st.error(f"Columnas detectadas: {list(reglas.columns)}")
-        st.error("❌ No existe columna 'Property' en reglas_apartamentos.csv")
+        st.error(f"Columnas detectadas en CSV: {list(reglas.columns)}")
+        st.error("No existe columna 'Property' en reglas_apartamentos.csv")
         st.stop()
 
-    reglas["Property"] = (
-        reglas["Property"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
+    reglas["Property"] = reglas["Property"].astype(str).str.strip().str.upper()
 
-    # Normalizar booleanos
     bool_cols = [
         "honorarios_apply_vat",
         "compute_iva_alquiler",
@@ -65,68 +51,79 @@ def load_reglas():
 
 
 # =====================================================
-# NORMALIZAR EXCEL DE RESERVAS
+# NORMALIZACIÓN ROBUSTA (COPIADA DEL BACKUP)
 # =====================================================
 
 def normalize_columns(df):
 
-    rename_map = {
-        "Nombre alojamiento": "Alojamiento",
-        "Fecha de entrada": "Fecha entrada",
-        "Fecha de salida": "Fecha salida",
-        "Noches": "Noches ocupadas",
-        "Alquiler con tasas": "Ingreso alojamiento",
-        "Tarifa limpieza": "Ingreso limpieza",
-        "Total reserva con tasas": "Total ingresos",
-        "Web origen": "Portal",
-        "Comisión Portal/Intermediario: Comisión calculada": "Comisión portal",
-    }
+    out = df.copy()
 
-    df = df.rename(columns=rename_map)
+    def first_existing(candidates):
+        norm_map = {str(c).strip().lower(): c for c in out.columns}
+        for cand in candidates:
+            key = cand.strip().lower()
+            if key in norm_map:
+                return norm_map[key]
+        return None
 
-    numeric_cols = [
-        "Ingreso alojamiento",
-        "Ingreso limpieza",
-        "Total ingresos",
-        "Comisión portal"
-    ]
+    col_aloj = first_existing(["Nombre alojamiento","Alojamiento","Nombre del alojamiento"])
+    col_fent = first_existing(["Fecha entrada","Fecha de entrada"])
+    col_fsal = first_existing(["Fecha salida","Fecha de salida"])
+    col_noch = first_existing(["Noches","Noches ocupadas"])
+    col_alq  = first_existing(["Alquiler con tasas","Ingreso alojamiento","Importe alojamiento"])
+    col_ext  = first_existing([
+        "Ingreso limpieza","Tarifa limpieza","Limpieza","Importe limpieza",
+        "Extras con tasas","Gastos de limpieza","Gasto limpieza"
+    ])
+    col_tot  = first_existing(["Total reserva con tasas","Total ingresos","Total"])
+    col_port = first_existing(["Web origen","Portal","Canal"])
+    col_comi = first_existing([
+        "Comisión Portal/Intermediario: Comisión calculada",
+        "Comisión portal","Comisión"
+    ])
 
-    for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+    rename = {}
+    if col_aloj: rename[col_aloj] = "Alojamiento"
+    if col_fent: rename[col_fent] = "Fecha entrada"
+    if col_fsal: rename[col_fsal] = "Fecha salida"
+    if col_noch: rename[col_noch] = "Noches ocupadas"
+    if col_alq:  rename[col_alq]  = "Ingreso alojamiento"
+    if col_ext:  rename[col_ext]  = "Ingreso limpieza"
+    if col_tot:  rename[col_tot]  = "Total ingresos"
+    if col_port: rename[col_port] = "Portal"
+    if col_comi: rename[col_comi] = "Comisión portal"
 
-    if "Alojamiento" in df.columns:
-        df["Alojamiento"] = (
-            df["Alojamiento"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
+    out.rename(columns=rename, inplace=True)
 
-    if "Fecha entrada" in df.columns:
-        df["Fecha entrada"] = pd.to_datetime(
-            df["Fecha entrada"],
-            errors="coerce"
-        )
+    if "Ingreso limpieza" not in out.columns:
+        out["Ingreso limpieza"] = 0.0
 
-    return df
+    for c in ["Ingreso alojamiento","Ingreso limpieza","Total ingresos","Comisión portal"]:
+        if c in out.columns:
+            out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0)
+
+    for c in ["Fecha entrada","Fecha salida"]:
+        if c in out.columns:
+            out[c] = pd.to_datetime(out[c], errors="coerce", dayfirst=True)
+
+    if "Alojamiento" in out.columns:
+        out["Alojamiento"] = out["Alojamiento"].astype(str).str.strip().str.upper()
+
+    return out
 
 
 # =====================================================
-# MOTOR DE LIQUIDACIONES (REPLICA APP ORIGINAL)
+# MOTOR DE LIQUIDACIÓN DINÁMICO
 # =====================================================
 
 def process_dynamic(df, reglas):
 
-    df = df.merge(
-        reglas,
-        left_on="Alojamiento",
-        right_on="Property",
-        how="left"
-    )
+    df = df.merge(reglas, left_on="Alojamiento", right_on="Property", how="left")
+    df = df.loc[:, ~df.columns.duplicated()]
 
+    # 🔥 SOLO apartamentos con reglas
     df = df[df["Property"].notna()].copy()
-    
+
     if df.empty:
         st.warning("No hay apartamentos del CSV en el período seleccionado.")
         st.stop()
@@ -135,25 +132,18 @@ def process_dynamic(df, reglas):
     # COMISIÓN PORTAL
     # -------------------------
 
-    df["Comisión portal"] = pd.to_numeric(
-        df["Comisión portal"],
-        errors="coerce"
-    ).fillna(0)
-
     if "Portal" in df.columns:
         portal_series = df["Portal"]
-
-        # Si hay columnas duplicadas, coger solo la primera
         if isinstance(portal_series, pd.DataFrame):
             portal_series = portal_series.iloc[:, 0]
+        mask_booking = portal_series.astype(str).str.lower().str.contains("booking", na=False)
+    else:
+        mask_booking = pd.Series(False, index=df.index)
 
-            mask_booking = portal_series.astype(str).str.lower().str.contains("booking", na=False)
-        else:
-         mask_booking = pd.Series(False, index=df.index)
+    df["Comisión portal"] = pd.to_numeric(df["Comisión portal"], errors="coerce").fillna(0)
 
     df.loc[
-        (mask_booking)
-        & (df["skip_booking_vat"] == False),
+        (mask_booking) & (df["skip_booking_vat"] == False),
         "Comisión portal"
     ] *= (1 + df["commission_vat_pct"] / 100)
 
@@ -171,7 +161,7 @@ def process_dynamic(df, reglas):
     )
 
     # -------------------------
-    # HONORARIOS FLORIT
+    # HONORARIOS
     # -------------------------
 
     def calc_honorarios(row):
@@ -220,13 +210,8 @@ def process_dynamic(df, reglas):
         + df["Amenities"]
     )
 
-    df["Pago al propietario"] = (
-        df["Total ingresos"] - df["Total Gastos"]
-    )
-
-    df["Pago recibido"] = (
-        df["Total ingresos"] - df["Comisión portal"]
-    )
+    df["Pago al propietario"] = df["Total ingresos"] - df["Total Gastos"]
+    df["Pago recibido"] = df["Total ingresos"] - df["Comisión portal"]
 
     columnas_finales = [
         "Alojamiento",
@@ -247,7 +232,9 @@ def process_dynamic(df, reglas):
         "Pago recibido"
     ]
 
-    return df[columnas_finales]
+    columnas_existentes = [c for c in columnas_finales if c in df.columns]
+
+    return df[columnas_existentes]
 
 
 # =====================================================
@@ -280,25 +267,15 @@ def build_excel(df):
 
 st.title("📊 Liquidaciones dinámicas")
 
-start_date = st.date_input(
-    "Desde",
-    value=date(date.today().year, date.today().month, 1)
-)
+start_date = st.date_input("Desde", value=date(date.today().year, date.today().month, 1))
+end_date = st.date_input("Hasta", value=date.today())
 
-end_date = st.date_input(
-    "Hasta",
-    value=date.today()
-)
-
-file_reservas = st.file_uploader(
-    "Sube archivo de reservas (.xlsx)",
-    type=["xlsx"]
-)
+file_reservas = st.file_uploader("Sube archivo de reservas (.xlsx)", type=["xlsx"])
 
 if st.button("Generar liquidación"):
 
     if not file_reservas:
-        st.error("❌ Sube el archivo de reservas.")
+        st.error("Sube el archivo de reservas.")
         st.stop()
 
     reglas = load_reglas()
@@ -313,13 +290,13 @@ if st.button("Generar liquidación"):
 
     df_final = process_dynamic(df_res, reglas)
 
-    st.success("✅ Liquidación generada correctamente")
+    st.success("Liquidación generada correctamente.")
     st.dataframe(df_final, use_container_width=True)
 
     excel_file = build_excel(df_final)
 
     st.download_button(
-        "📥 Descargar Excel",
+        "Descargar Excel",
         excel_file.getvalue(),
         file_name="Liquidacion_dinamica.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
