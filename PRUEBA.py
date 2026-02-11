@@ -15,12 +15,26 @@ st.set_page_config(page_title="Liquidaciones Dinámicas", page_icon="🏦", layo
 @st.cache_data
 def load_reglas():
     try:
-        reglas = pd.read_csv("reglas_apartamentos.csv")
+        # 🔥 IMPORTANTE: separador español
+        reglas = pd.read_csv("reglas_apartamentos.csv", sep=";")
     except FileNotFoundError:
         st.error("No se encuentra reglas_apartamentos.csv en el repositorio.")
         st.stop()
 
-    reglas["Alojamiento"] = reglas["Alojamiento"].astype(str).str.strip().str.upper()
+    # Limpiar nombres columnas
+    reglas.columns = reglas.columns.str.strip()
+
+    if "Alojamiento" not in reglas.columns:
+        st.error(f"Columnas detectadas en CSV: {list(reglas.columns)}")
+        st.error("No existe columna 'Alojamiento' en reglas_apartamentos.csv")
+        st.stop()
+
+    reglas["Alojamiento"] = (
+        reglas["Alojamiento"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
     columnas_necesarias = [
         "Alojamiento",
@@ -73,7 +87,12 @@ def normalize_columns(df):
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
     if "Alojamiento" in df.columns:
-        df["Alojamiento"] = df["Alojamiento"].astype(str).str.strip().str.upper()
+        df["Alojamiento"] = (
+            df["Alojamiento"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
 
     if "Fecha entrada" in df.columns:
         df["Fecha entrada"] = pd.to_datetime(df["Fecha entrada"], errors="coerce")
@@ -90,12 +109,16 @@ def process_dynamic(df, reglas, vat_pct=21.0):
     df = df.merge(reglas, on="Alojamiento", how="left")
 
     if df["modelo"].isna().any():
-        st.error("Hay alojamientos sin reglas definidas en el CSV.")
+        faltantes = df[df["modelo"].isna()]["Alojamiento"].unique()
+        st.error(f"Alojamientos sin reglas definidas: {faltantes}")
         st.stop()
 
-    df["Comisión portal"] = pd.to_numeric(df["Comisión portal"], errors="coerce").fillna(0)
+    df["Comisión portal"] = pd.to_numeric(
+        df["Comisión portal"],
+        errors="coerce"
+    ).fillna(0)
 
-    # Recalcular comisión con IVA si aplica (Booking)
+    # IVA comisión Booking
     mask_booking = df["Portal"].astype(str).str.lower().str.contains("booking", na=False)
 
     df.loc[
@@ -103,8 +126,9 @@ def process_dynamic(df, reglas, vat_pct=21.0):
         "Comisión portal"
     ] *= (1 + vat_pct / 100)
 
-    # IVA alquiler
+    # IVA alquiler (si 10%)
     df["IVA del alquiler"] = 0.0
+
     mask_iva10 = df["iva_alquiler_tipo"] == 10
 
     df.loc[mask_iva10, "IVA del alquiler"] = (
