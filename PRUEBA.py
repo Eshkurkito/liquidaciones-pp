@@ -9,48 +9,45 @@ from openpyxl.styles import Font
 st.set_page_config(page_title="Liquidaciones Dinámicas", page_icon="🏦", layout="wide")
 
 # =====================================================
-# CARGA REGLAS (DESDE REPOSITORIO)
+# CARGA REGLAS DESDE REPOSITORIO
 # =====================================================
 
 @st.cache_data
 def load_reglas():
     try:
-        # 🔥 IMPORTANTE: separador español
         reglas = pd.read_csv("reglas_apartamentos.csv", sep=";")
     except FileNotFoundError:
         st.error("No se encuentra reglas_apartamentos.csv en el repositorio.")
         st.stop()
 
-    # Limpiar nombres columnas
     reglas.columns = reglas.columns.str.strip()
 
-    if "Alojamiento" not in reglas.columns:
-        st.error(f"Columnas detectadas en CSV: {list(reglas.columns)}")
-        st.error("No existe columna 'Alojamiento' en reglas_apartamentos.csv")
+    if "Property" not in reglas.columns:
+        st.error(f"Columnas detectadas: {list(reglas.columns)}")
+        st.error("No existe columna 'Property' en reglas_apartamentos.csv")
         st.stop()
 
-    reglas["Alojamiento"] = (
-        reglas["Alojamiento"]
+    reglas["Property"] = (
+        reglas["Property"]
         .astype(str)
         .str.strip()
         .str.upper()
     )
 
-    columnas_necesarias = [
-        "Alojamiento",
-        "modelo",
-        "pct_honorarios",
-        "amenities",
-        "limpieza_fija",
-        "usar_limpieza_excel",
-        "recalcular_comision_con_iva",
-        "iva_alquiler_tipo"
+    # Convertir booleanos correctamente
+    bool_cols = [
+        "honorarios_apply_vat",
+        "compute_iva_alquiler",
+        "treat_empty_portal_as_booking",
+        "skip_booking_vat",
+        "hon_base_exclude_commission"
     ]
 
-    for col in columnas_necesarias:
-        if col not in reglas.columns:
-            st.error(f"Falta columna '{col}' en reglas_apartamentos.csv")
-            st.stop()
+    for col in bool_cols:
+        if col in reglas.columns:
+            reglas[col] = reglas[col].astype(str).str.upper().map(
+                {"TRUE": True, "FALSE": False}
+            )
 
     return reglas
 
@@ -104,64 +101,92 @@ def normalize_columns(df):
 # MOTOR DINÁMICO
 # =====================================================
 
-def process_dynamic(df, reglas, vat_pct=21.0):
+def process_dynamic(df, reglas):
 
-    df = df.merge(reglas, on="Alojamiento", how="left")
+    df = df.merge(
+        reglas,
+        left_on="Alojamiento",
+        right_on="Property",
+        how="left"
+    )
 
-    if df["modelo"].isna().any():
-        faltantes = df[df["modelo"].isna()]["Alojamiento"].unique()
+    if df["Property"].isna().any():
+        faltantes = df[df["Property"].isna()]["Alojamiento"].unique()
         st.error(f"Alojamientos sin reglas definidas: {faltantes}")
         st.stop()
+
+    # ------------------------------
+    # Comisión portal
+    # ------------------------------
 
     df["Comisión portal"] = pd.to_numeric(
         df["Comisión portal"],
         errors="coerce"
     ).fillna(0)
 
-    # IVA comisión Booking
     mask_booking = df["Portal"].astype(str).str.lower().str.contains("booking", na=False)
 
     df.loc[
-        (mask_booking) & (df["recalcular_comision_con_iva"] == True),
+        (mask_booking) & (df["skip_booking_vat"] == False),
         "Comisión portal"
-    ] *= (1 + vat_pct / 100)
+    ] *= (1 + df["commission_vat_pct"] / 100)
 
-    # IVA alquiler (si 10%)
+    # ------------------------------
+    # IVA alquiler
+    # ------------------------------
+
     df["IVA del alquiler"] = 0.0
 
-    mask_iva10 = df["iva_alquiler_tipo"] == 10
+    mask_iva = df["compute_iva_alquiler"] == True
 
-    df.loc[mask_iva10, "IVA del alquiler"] = (
-        df.loc[mask_iva10, "Ingreso alojamiento"]
-        - (df.loc[mask_iva10, "Ingreso alojamiento"] / 1.10)
+    df.loc[mask_iva, "IVA del alquiler"] = (
+        df.loc[mask_iva, "Ingreso alojamiento"]
+        - (df.loc[mask_iva, "Ingreso alojamiento"] / 1.10)
     )
 
+    # ------------------------------
     # Honorarios
+    # ------------------------------
+
     def calc_honorarios(row):
 
         base = row["Ingreso alojamiento"]
 
-        if row["modelo"] == 3:
-            base = base - row["Comisión portal"]
+        if row["hon_base_exclude_commission"]:
+            base -= row["Comisión portal"]
 
-        if row["modelo"] in [4, 5]:
-            base = base - row["IVA del alquiler"] - row["Comisión portal"]
+        if row["compute_iva_alquiler"]:
+            base -= row["IVA del alquiler"]
 
-        return base * row["pct_honorarios"] * 1.21
+        honorarios = base * row["honorarios_pct"]
+
+        if row["honorarios_apply_vat"]:
+            honorarios *= (1 + row["honorarios_vat_pct"] / 100)
+
+        return honorarios
 
     df["Honorarios Florit"] = df.apply(calc_honorarios, axis=1)
 
+    # ------------------------------
     # Limpieza
+    # ------------------------------
+
     df["Gasto limpieza"] = np.where(
-        df["usar_limpieza_excel"] == True,
-        df["Ingreso limpieza"],
-        df["limpieza_fija"].fillna(0)
+        df["cleaning_fee"].notna(),
+        df["cleaning_fee"],
+        df["Ingreso limpieza"]
     )
 
+    # ------------------------------
     # Amenities
-    df["Amenities"] = df["amenities"].fillna(0)
+    # ------------------------------
 
+    df["Amenities"] = df["amenities_amount"].fillna(0)
+
+    # ------------------------------
     # Totales
+    # ------------------------------
+
     df["Total Gastos"] = (
         df["Comisión portal"]
         + df["Honorarios Florit"]
@@ -172,7 +197,28 @@ def process_dynamic(df, reglas, vat_pct=21.0):
     df["Pago al propietario"] = df["Total ingresos"] - df["Total Gastos"]
     df["Pago recibido"] = df["Total ingresos"] - df["Comisión portal"]
 
-    return df
+    columnas_finales = [
+        "Alojamiento",
+        "Fecha entrada",
+        "Fecha salida",
+        "Noches ocupadas",
+        "Ingreso alojamiento",
+        "IVA del alquiler",
+        "Ingreso limpieza",
+        "Total ingresos",
+        "Portal",
+        "Comisión portal",
+        "Honorarios Florit",
+        "Gasto limpieza",
+        "Amenities",
+        "Total Gastos",
+        "Pago al propietario",
+        "Pago recibido"
+    ]
+
+    columnas_existentes = [c for c in columnas_finales if c in df.columns]
+
+    return df[columnas_existentes]
 
 
 # =====================================================
