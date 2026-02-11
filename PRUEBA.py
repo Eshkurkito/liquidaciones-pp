@@ -125,9 +125,10 @@ def process_dynamic(df, reglas):
         how="left"
     )
 
-    if df["Property"].isna().any():
-        faltantes = df[df["Property"].isna()]["Alojamiento"].unique()
-        st.error(f"❌ Alojamientos sin reglas: {faltantes}")
+    df = df[df["Property"].notna()].copy()
+    
+    if df.empty:
+        st.warning("No hay apartamentos del CSV en el período seleccionado.")
         st.stop()
 
     # -------------------------
