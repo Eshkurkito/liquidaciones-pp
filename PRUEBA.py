@@ -140,9 +140,16 @@ def process_dynamic(df, reglas):
         errors="coerce"
     ).fillna(0)
 
-    mask_booking = df["Portal"].astype(str).str.lower().str.contains(
-        "booking", na=False
-    )
+    if "Portal" in df.columns:
+        portal_series = df["Portal"]
+
+        # Si hay columnas duplicadas, coger solo la primera
+        if isinstance(portal_series, pd.DataFrame):
+            portal_series = portal_series.iloc[:, 0]
+
+            mask_booking = portal_series.astype(str).str.lower().str.contains("booking", na=False)
+        else:
+         mask_booking = pd.Series(False, index=df.index)
 
     df.loc[
         (mask_booking)
