@@ -108,6 +108,26 @@ def normalize_columns(df):
 
     if "Alojamiento" in out.columns:
         out["Alojamiento"] = out["Alojamiento"].astype(str).str.strip().str.upper()
+        
+        
+        # -------------------------
+    # HUESPEDES TOTALES
+    # -------------------------
+
+    col_adultos = first_existing(["Adultos","adultos"])
+    col_ninos   = first_existing(["Niños","Ninos","niños","ninos"])
+
+    if col_adultos:
+        out["Adultos"] = pd.to_numeric(out[col_adultos], errors="coerce").fillna(0)
+    else:
+        out["Adultos"] = 0
+
+    if col_ninos:
+        out["Niños"] = pd.to_numeric(out[col_ninos], errors="coerce").fillna(0)
+    else:
+        out["Niños"] = 0
+
+    out["Huéspedes totales"] = out["Adultos"] + out["Niños"]
 
     return out
 
@@ -218,6 +238,7 @@ def process_dynamic(df, reglas):
         "Fecha entrada",
         "Fecha salida",
         "Noches ocupadas",
+        "Huéspedes totales",
         "Ingreso alojamiento",
         "IVA del alquiler",
         "Ingreso limpieza",
@@ -233,6 +254,8 @@ def process_dynamic(df, reglas):
     ]
 
     columnas_existentes = [c for c in columnas_finales if c in df.columns]
+    
+    df = df.sort_values(by=["Alojamiento", "Fecha entrada"])
 
     return df[columnas_existentes]
 
