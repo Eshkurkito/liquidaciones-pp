@@ -358,6 +358,24 @@ if st.button("Generar liquidación"):
         st.stop()
 
     df_final = process_dynamic(df_res, reglas)
+    
+    # ---------------------------------
+    # PISOS SIN LIQUIDACIÓN
+    # ---------------------------------
+
+    pisos_gestionados = set(reglas["Property"].unique())
+    pisos_con_liquidacion = set(df_final["Alojamiento"].unique())
+
+    pisos_sin_liquidacion = sorted(pisos_gestionados - pisos_con_liquidacion)
+
+    if pisos_sin_liquidacion:
+        st.info(
+        f"Pisos sin liquidación en este período: {', '.join(pisos_sin_liquidacion)}"
+    )
+    else:
+        
+        st.success("Todos los pisos gestionados tienen liquidación en este período.")
+
 
     st.success("Liquidación generada correctamente.")
 
