@@ -91,11 +91,18 @@ def normalize_columns(df):
     ])
     
     # Buscar columna comisión de forma flexible
+    # Detectar columna de comisión de forma flexible
     col_comi = None
+
     for col in out.columns:
-        if "comision" in col.lower() or "comisión" in col.lower():
+        nombre = str(col).lower()
+        if "comisión" in nombre or "comision" in nombre:
             col_comi = col
-        break
+            break
+
+    if col_comi:
+        out.rename(columns={col_comi: "Comisión portal"}, inplace=True)
+
 
 
     rename = {}
@@ -145,6 +152,10 @@ def normalize_columns(df):
         out["Niños"] = 0
 
     out["Huéspedes totales"] = out["Adultos"] + out["Niños"]
+
+    # Garantizar que exista Comisión portal
+    if "Comisión portal" not in out.columns:
+        out["Comisión portal"] = 0.0
 
     return out
 
