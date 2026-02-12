@@ -339,6 +339,21 @@ if st.button("Generar liquidación"):
     ]
 
     df_final = process_dynamic(df_res, reglas)
+    
+    # ---------------------------------
+    # FILTRO POR ALOJAMIENTO
+    # ---------------------------------
+
+    alojamientos_disponibles = sorted(df_final["Alojamiento"].unique())
+
+    alojamientos_seleccionados = st.multiselect(
+    "Filtrar por alojamiento",
+    options=alojamientos_disponibles,
+    default=alojamientos_disponibles
+    )
+
+    df_final = df_final[df_final["Alojamiento"].isin(alojamientos_seleccionados)]
+
 
     st.success("Liquidación generada correctamente.")
     for aloj, subdf in df_final.groupby("Alojamiento"):
