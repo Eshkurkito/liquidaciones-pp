@@ -1,7 +1,7 @@
 Property,honorarios_pct,honorarios_apply_vat,honorarios_vat_pct,amenities_amount,cleaning_fee,compute_iva_alquiler,commission_vat_pct,treat_empty_portal_as_booking,skip_booking_vat,split_commission,hon_base_exclude_commission,self_managed,notes APOLO 180,0.20,1,21.0,12.04,0.0,0,21.0,0,0,0,0,0,"Caso 1" CARCAIXENT 01,0.85,1,0.0,0.0,0.0,0,21.0,0,0,0,1,0,"Caso 1" ALMIRANTE 01,0.22,1,21.0,11.33,0.0,0,21.0,0,0,0,0,0,"Caso 1" ALMIRANTE 02,0.22,1,21.0,11.33,0.0,0,21.0,0,0,0,0,0,"Caso 1" CADIZ,0.20,1,21.0,9.11,0.0,0,21.0,0,0,0,0,0,"Caso 1"
 APOLO 180,0.20,1,21.0,12.04,0.0,0,21.0,0,0,0,0,0,"Caso 1"
 CARCAIXENT 01,0.85,1,0.0,0.0,0.0,0,,0,0,0,0,1,"Caso 1"
-ALMIRANTE 01,0.22,1,21.0,11.33,0.0,0,21.0,0,1,0,0,0,"Caso 1"
+ALMIRANTE 01,0.22,1,21.0,11.33,0.0,0,21.0,0,0,0,0,0,"Caso 1"
 ALMIRANTE 02,0.22,1,21.0,11.33,0.0,0,21.0,0,0,0,0,0,"Caso 1"
 CADIZ,0.20,1,21.0,9.11,0.0,0,21.0,0,0,0,0,0,"Caso 1"
 DENIA 61,0.20,1,21.0,10.96,0.0,0,21.0,0,0,0,0,0,"Caso 1"
