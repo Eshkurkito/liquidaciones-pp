@@ -326,11 +326,27 @@ reglas = load_reglas()
 
 alojamientos_gestionados = sorted(reglas["Property"].unique())
 
+# Inicializar estado si no existe
+if "alojamientos_sel" not in st.session_state:
+    st.session_state.alojamientos_sel = alojamientos_gestionados
+
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("Seleccionar todos"):
+        st.session_state.alojamientos_sel = alojamientos_gestionados
+
+with col2:
+    if st.button("Quitar todos"):
+        st.session_state.alojamientos_sel = []
+
 alojamientos_seleccionados = st.multiselect(
     "Selecciona alojamiento(s)",
     options=alojamientos_gestionados,
-    default=alojamientos_gestionados
+    default=st.session_state.alojamientos_sel,
+    key="alojamientos_sel"
 )
+
 
 # ---------------------------------
 # BOTÓN
