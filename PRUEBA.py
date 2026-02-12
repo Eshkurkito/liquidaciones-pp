@@ -89,6 +89,14 @@ def normalize_columns(df):
         "Comisión Portal/Intermediario: Comisión calculada",
         "Comisión portal","Comisión"
     ])
+    
+    # Buscar columna comisión de forma flexible
+    col_comi = None
+    for col in out.columns:
+        if "comision" in col.lower() or "comisión" in col.lower():
+            col_comi = col
+        break
+
 
     rename = {}
     if col_aloj: rename[col_aloj] = "Alojamiento"
@@ -99,7 +107,8 @@ def normalize_columns(df):
     if col_ext:  rename[col_ext]  = "Ingreso limpieza"
     if col_tot:  rename[col_tot]  = "Total ingresos"
     if col_port: rename[col_port] = "Portal"
-    if col_comi: rename[col_comi] = "Comisión portal"
+    if col_comi: 
+        rename[col_comi] = "Comisión portal"
 
     out.rename(columns=rename, inplace=True)
 
