@@ -110,7 +110,7 @@ def normalize_columns(df):
         out["Alojamiento"] = out["Alojamiento"].astype(str).str.strip().str.upper()
         
         
-        # -------------------------
+    # -------------------------
     # HUESPEDES TOTALES
     # -------------------------
 
