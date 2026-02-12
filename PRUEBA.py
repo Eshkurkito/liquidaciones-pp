@@ -46,6 +46,14 @@ def load_reglas():
                 .map({"TRUE": True, "FALSE": False})
                 .fillna(False)
             )
+            
+    if "self_managed" in reglas.columns:
+        reglas["self_managed"] = (
+        pd.to_numeric(reglas["self_managed"], errors="coerce")
+        .fillna(0)
+        .astype(int)
+    )
+
 
     return reglas
 
@@ -231,6 +239,34 @@ def process_dynamic(df, reglas):
     )
 
     df["Pago al propietario"] = df["Total ingresos"] - df["Total Gastos"]
+    
+    # ---------------------------------
+    # SELF MANAGED (Florit = propietario)
+    # ---------------------------------
+
+    if "self_managed" in df.columns:
+
+        mask_self = df["self_managed"] == 1
+
+    # Recalcular honorarios como lo que realmente gana el propietario
+    df.loc[mask_self, "Honorarios Florit"] = (
+        df.loc[mask_self, "Total ingresos"]
+        - df.loc[mask_self, "Comisión portal"]
+        - df.loc[mask_self, "Gasto limpieza"]
+        - df.loc[mask_self, "Amenities"]
+    )
+
+    # Ajustar Total Gastos (sin incluir honorarios)
+    df.loc[mask_self, "Total Gastos"] = (
+        df.loc[mask_self, "Comisión portal"]
+        + df.loc[mask_self, "Gasto limpieza"]
+        + df.loc[mask_self, "Amenities"]
+    )
+
+    # Hacer que coincidan
+    df.loc[mask_self, "Pago al propietario"] = df.loc[mask_self, "Honorarios Florit"]
+
+    
     df["Pago recibido"] = df["Total ingresos"] - df["Comisión portal"]
 
     columnas_finales = [
