@@ -311,10 +311,6 @@ def build_excel(df):
 
 
 
-# =====================================================
-# UI
-# =====================================================
-
 st.title("📊 Liquidaciones dinámicas")
 
 start_date = st.date_input("Desde", value=date(date.today().year, date.today().month, 1))
@@ -322,48 +318,56 @@ end_date = st.date_input("Hasta", value=date.today())
 
 file_reservas = st.file_uploader("Sube archivo de reservas (.xlsx)", type=["xlsx"])
 
+# ---------------------------------
+# CARGAR REGLAS Y CREAR FILTRO
+# ---------------------------------
+
+reglas = load_reglas()
+
+alojamientos_gestionados = sorted(reglas["Property"].unique())
+
+alojamientos_seleccionados = st.multiselect(
+    "Selecciona alojamiento(s)",
+    options=alojamientos_gestionados,
+    default=alojamientos_gestionados
+)
+
+# ---------------------------------
+# BOTÓN
+# ---------------------------------
+
 if st.button("Generar liquidación"):
 
     if not file_reservas:
         st.error("Sube el archivo de reservas.")
         st.stop()
 
-    reglas = load_reglas()
-
     df_res = pd.read_excel(file_reservas)
     df_res = normalize_columns(df_res)
+
+    # 🔥 FILTRAR ANTES DEL CÁLCULO
+    df_res = df_res[df_res["Alojamiento"].isin(alojamientos_seleccionados)]
 
     df_res = df_res[
         (df_res["Fecha entrada"] >= pd.to_datetime(start_date))
         & (df_res["Fecha entrada"] <= pd.to_datetime(end_date))
     ]
 
+    if df_res.empty:
+        st.warning("No hay reservas para los alojamientos seleccionados.")
+        st.stop()
+
     df_final = process_dynamic(df_res, reglas)
-    
-    # ---------------------------------
-    # FILTRO POR ALOJAMIENTO
-    # ---------------------------------
-
-    alojamientos_disponibles = sorted(df_final["Alojamiento"].unique())
-
-    alojamientos_seleccionados = st.multiselect(
-    "Filtrar por alojamiento",
-    options=alojamientos_disponibles,
-    default=alojamientos_disponibles
-    )
-
-    df_final = df_final[df_final["Alojamiento"].isin(alojamientos_seleccionados)]
-
 
     st.success("Liquidación generada correctamente.")
+
     for aloj, subdf in df_final.groupby("Alojamiento"):
+
         st.subheader(f"🏠 {aloj}")
 
         block = subdf.copy()
 
-        # Crear fila TOTAL
         total_row = {}
-
         for col in block.columns:
             if pd.api.types.is_numeric_dtype(block[col]):
                 total_row[col] = block[col].sum()
@@ -376,7 +380,6 @@ if st.button("Generar liquidación"):
 
         st.dataframe(block, use_container_width=True)
         st.divider()
-
 
     excel_file = build_excel(df_final)
 
