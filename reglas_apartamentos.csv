@@ -1,5 +1,5 @@
 Property,honorarios_pct,honorarios_apply_vat,honorarios_vat_pct,amenities_amount,cleaning_fee,compute_iva_alquiler,commission_vat_pct,treat_empty_portal_as_booking,skip_booking_vat,split_commission,hon_base_exclude_commission,notes
-CARCAIXENT 01,0,1,0,0.00,0.0,0,0.0,0,0,0,0,"Caso 1" 
+CARCAIXENT 01,0.0,1,0.0,0.00,0.0,0,0.0,0,0,0,0,"Caso 1" 
 APOLO 180,0.20,1,21.0,12.04,0.0,0,21.0,0,0,0,0,"Caso 1"
 ALMIRANTE 01,0.22,1,21.0,11.33,0.0,0,21.0,0,0,0,0,"Caso 1"
 ALMIRANTE 02,0.22,1,21.0,11.33,0.0,0,21.0,0,0,0,0,"Caso 1"
