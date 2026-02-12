@@ -344,23 +344,23 @@ if st.button("Generar liquidación"):
     for aloj, subdf in df_final.groupby("Alojamiento"):
         st.subheader(f"🏠 {aloj}")
 
-    block = subdf.copy()
+        block = subdf.copy()
 
-    # Crear fila TOTAL
-    total_row = {}
+        # Crear fila TOTAL
+        total_row = {}
 
-    for col in block.columns:
-        if pd.api.types.is_numeric_dtype(block[col]):
-            total_row[col] = block[col].sum()
-        else:
-            total_row[col] = ""
+        for col in block.columns:
+            if pd.api.types.is_numeric_dtype(block[col]):
+                total_row[col] = block[col].sum()
+            else:
+                total_row[col] = ""
 
-    total_row["Fecha entrada"] = "TOTAL"
+        total_row["Fecha entrada"] = "TOTAL"
 
-    block = pd.concat([block, pd.DataFrame([total_row])], ignore_index=True)
+        block = pd.concat([block, pd.DataFrame([total_row])], ignore_index=True)
 
-    st.dataframe(block, use_container_width=True)
-    st.divider()
+        st.dataframe(block, use_container_width=True)
+        st.divider()
 
 
     excel_file = build_excel(df_final)
