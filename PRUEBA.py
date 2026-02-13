@@ -170,6 +170,17 @@ def process_dynamic(df, reglas):
     df = df.merge(reglas, left_on="Alojamiento", right_on="Property", how="left")
     df = df.loc[:, ~df.columns.duplicated()]
 
+    # -------------------------
+    # PROTECCIONES COLUMNAS NUEVAS
+    # -------------------------
+
+    if "hon_base_use_commission_without_vat" not in df.columns:
+        df["hon_base_use_commission_without_vat"] = False
+
+    if "commission_vat_pct" not in df.columns:
+        df["commission_vat_pct"] = 0
+
+
     # 🔥 SOLO apartamentos con reglas
     df = df[df["Property"].notna()].copy()
 
@@ -181,20 +192,31 @@ def process_dynamic(df, reglas):
     # COMISIÓN PORTAL
     # -------------------------
 
-    if "Portal" in df.columns:
-        portal_series = df["Portal"]
-        if isinstance(portal_series, pd.DataFrame):
-            portal_series = portal_series.iloc[:, 0]
-        mask_booking = portal_series.astype(str).str.lower().str.contains("booking", na=False)
-    else:
-        mask_booking = pd.Series(False, index=df.index)
-
     df["Comisión portal"] = pd.to_numeric(df["Comisión portal"], errors="coerce").fillna(0)
 
-    df.loc[
-        (mask_booking) & (df["skip_booking_vat"] == False),
-        "Comisión portal"
-    ] *= (1 + df["commission_vat_pct"] / 100)
+    # Guardar comisión original como SIN IVA
+    df["Comisión portal sin IVA"] = df["Comisión portal"].copy()
+
+    # Calcular IVA comisión portal
+    df["IVA comisión portal"] = (
+        df["Comisión portal sin IVA"] * df["commission_vat_pct"] / 100
+    )
+
+    # Crear comisión con IVA
+    df["Comisión portal con IVA"] = (
+        df["Comisión portal sin IVA"] + df["IVA comisión portal"]
+    )
+
+    # Determinar cuál usar como comisión final (para gastos)
+    if "skip_booking_vat" in df.columns:
+        mask_booking = df["Portal"].astype(str).str.lower().str.contains("booking", na=False)
+        df["Comisión portal"] = np.where(
+            mask_booking & (df["skip_booking_vat"] == False),
+            df["Comisión portal con IVA"],
+            df["Comisión portal sin IVA"]
+        )
+    else:
+        df["Comisión portal"] = df["Comisión portal con IVA"]
 
     # -------------------------
     # IVA ALQUILER
