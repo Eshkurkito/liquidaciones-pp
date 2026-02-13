@@ -385,119 +385,216 @@ def build_excel(df):
 
 
 st.title("📊 Liquidaciones dinámicas")
-
-start_date = st.date_input("Desde", value=date(date.today().year, date.today().month, 1))
-end_date = st.date_input("Hasta", value=date.today())
-
-file_reservas = st.file_uploader("Sube archivo de reservas (.xlsx)", type=["xlsx"])
-
-# ---------------------------------
-# CARGAR REGLAS Y CREAR FILTRO
-# ---------------------------------
-
-reglas = pd.read_csv(
-    "reglas_apartamentos.csv",
-    sep=",",
-    encoding="utf-8"
-)
+tab1, tab2 = st.tabs(["Liquidaciones", "Previsión Tesorería"])
+with tab1:
 
 
-alojamientos_gestionados = sorted(reglas["Property"].unique())
+    start_date = st.date_input("Desde", value=date(date.today().year, date.today().month, 1))
+    end_date = st.date_input("Hasta", value=date.today())
 
-# Inicializar estado si no existe
-if "alojamientos_sel" not in st.session_state:
-    st.session_state.alojamientos_sel = alojamientos_gestionados
+    file_reservas = st.file_uploader("Sube archivo de reservas (.xlsx)", type=["xlsx"])
 
-col1, col2 = st.columns(2)
+    # ---------------------------------
+    # CARGAR REGLAS Y CREAR FILTRO
+    # ---------------------------------
 
-with col1:
-    if st.button("Seleccionar todos"):
+    reglas = pd.read_csv(
+        "reglas_apartamentos.csv",
+        sep=",",
+        encoding="utf-8"
+    )
+
+
+    alojamientos_gestionados = sorted(reglas["Property"].unique())
+
+    # Inicializar estado si no existe
+    if "alojamientos_sel" not in st.session_state:
         st.session_state.alojamientos_sel = alojamientos_gestionados
 
-with col2:
-    if st.button("Quitar todos"):
-        st.session_state.alojamientos_sel = []
+    col1, col2 = st.columns(2)
 
-alojamientos_seleccionados = st.multiselect(
+    with col1:
+        if st.button("Seleccionar todos"):
+            st.session_state.alojamientos_sel = alojamientos_gestionados
+
+    with col2:
+        if st.button("Quitar todos"):
+            st.session_state.alojamientos_sel = []
+
+    alojamientos_seleccionados = st.multiselect(
     "Selecciona alojamiento(s)",
     options=alojamientos_gestionados,
     default=st.session_state.alojamientos_sel,
     key="alojamientos_sel"
-)
+    )
 
 
-# ---------------------------------
-# BOTÓN
-# ---------------------------------
+    # ---------------------------------
+    # BOTÓN
+    # ---------------------------------
 
-if st.button("Generar liquidación"):
+    if st.button("Generar liquidación"):
 
-    if not file_reservas:
-        st.error("Sube el archivo de reservas.")
-        st.stop()
+        if not file_reservas:
+            st.error("Sube el archivo de reservas.")
+            st.stop()
 
-    df_res = pd.read_excel(file_reservas)
-    df_res = normalize_columns(df_res)
+        df_res = pd.read_excel(file_reservas)
+        df_res = normalize_columns(df_res)
 
-    # 🔥 FILTRAR ANTES DEL CÁLCULO
-    df_res = df_res[df_res["Alojamiento"].isin(alojamientos_seleccionados)]
+        # 🔥 FILTRAR ANTES DEL CÁLCULO
+        df_res = df_res[df_res["Alojamiento"].isin(alojamientos_seleccionados)]
 
-    df_res = df_res[
-        (df_res["Fecha entrada"] >= pd.to_datetime(start_date))
-        & (df_res["Fecha entrada"] <= pd.to_datetime(end_date))
+        df_res = df_res[
+            (df_res["Fecha entrada"] >= pd.to_datetime(start_date))
+            & (df_res["Fecha entrada"] <= pd.to_datetime(end_date))
+        ]
+
+        if df_res.empty:
+            st.warning("No hay reservas para los alojamientos seleccionados.")
+            st.stop()
+
+        df_final = process_dynamic(df_res, reglas)
+    
+        # ---------------------------------
+        # PISOS SIN LIQUIDACIÓN
+        # ---------------------------------
+
+        pisos_gestionados = set(reglas["Property"].unique())
+        pisos_con_liquidacion = set(df_final["Alojamiento"].unique())
+
+        pisos_sin_liquidacion = sorted(pisos_gestionados - pisos_con_liquidacion)
+
+        if pisos_sin_liquidacion:
+            st.info(
+            f"Pisos sin liquidación en este período: {', '.join(pisos_sin_liquidacion)}"
+        )
+        else:
+        
+            st.success("Todos los pisos gestionados tienen liquidación en este período.")
+
+
+        st.success("Liquidación generada correctamente.")
+
+        for aloj, subdf in df_final.groupby("Alojamiento"):
+
+            st.subheader(f"🏠 {aloj}")
+
+            block = subdf.copy()
+
+            total_row = {}
+            for col in block.columns:
+                if pd.api.types.is_numeric_dtype(block[col]):
+                    total_row[col] = block[col].sum()
+                else:
+                    total_row[col] = ""
+
+            total_row["Fecha entrada"] = "TOTAL"
+
+            block = pd.concat([block, pd.DataFrame([total_row])], ignore_index=True)
+
+            st.dataframe(block, use_container_width=True)
+            st.divider()
+
+        excel_file = build_excel(df_final)
+
+        st.download_button(
+            "Descargar Excel",
+            excel_file.getvalue(),
+            file_name="Liquidacion_dinamica.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+# =====================================================
+# TAB 2 → PREVISIÓN TESORERÍA
+# =====================================================
+
+with tab2:
+
+    st.header("📈 Previsión Tesorería – Honorarios Florit")
+
+    fecha_corte = st.date_input(
+        "Fecha de corte",
+        value=end_date,
+        key="fecha_corte_tesoreria"
+    )
+
+    # -------------------------
+    # FILTRAR PERIODO
+    # -------------------------
+
+    df_periodo = df_res[
+        (df_res["Fecha entrada"] >= pd.to_datetime(start_date)) &
+        (df_res["Fecha entrada"] <= pd.to_datetime(end_date))
     ]
 
-    if df_res.empty:
-        st.warning("No hay reservas para los alojamientos seleccionados.")
+    df_periodo = process_dynamic(df_periodo, reglas)
+
+    if df_periodo.empty:
+        st.warning("No hay datos para el periodo seleccionado.")
         st.stop()
 
-    df_final = process_dynamic(df_res, reglas)
-    
-    # ---------------------------------
-    # PISOS SIN LIQUIDACIÓN
-    # ---------------------------------
+    # -------------------------
+    # HONORARIOS HASTA CORTE
+    # -------------------------
 
-    pisos_gestionados = set(reglas["Property"].unique())
-    pisos_con_liquidacion = set(df_final["Alojamiento"].unique())
+    df_corte = df_periodo[
+        df_periodo["Fecha entrada"] <= pd.to_datetime(fecha_corte)
+    ]
 
-    pisos_sin_liquidacion = sorted(pisos_gestionados - pisos_con_liquidacion)
+    honorarios_corte = df_corte["Honorarios Florit"].sum()
+    honorarios_periodo = df_periodo["Honorarios Florit"].sum()
 
-    if pisos_sin_liquidacion:
-        st.info(
-        f"Pisos sin liquidación en este período: {', '.join(pisos_sin_liquidacion)}"
+    porcentaje = 0
+    if honorarios_periodo > 0:
+        porcentaje = honorarios_corte / honorarios_periodo * 100
+
+    pendiente = honorarios_periodo - honorarios_corte
+
+    # -------------------------
+    # KPIs SUPERIORES
+    # -------------------------
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric("💶 Generado hasta corte", f"{honorarios_corte:,.2f} €")
+    col2.metric("📅 Total periodo", f"{honorarios_periodo:,.2f} €")
+    col3.metric("📊 % ejecutado", f"{porcentaje:,.1f} %")
+    col4.metric("🔮 Pendiente periodo", f"{pendiente:,.2f} €")
+
+    st.divider()
+
+    # -------------------------
+    # RANKING POR APARTAMENTO
+    # -------------------------
+
+    ranking = (
+        df_periodo
+        .groupby("Alojamiento")["Honorarios Florit"]
+        .sum()
+        .sort_values(ascending=False)
+        .reset_index()
     )
-    else:
-        
-        st.success("Todos los pisos gestionados tienen liquidación en este período.")
 
+    st.subheader("🏠 Ranking por apartamento")
+    st.dataframe(ranking, use_container_width=True)
 
-    st.success("Liquidación generada correctamente.")
+    st.divider()
 
-    for aloj, subdf in df_final.groupby("Alojamiento"):
+    # -------------------------
+    # EVOLUCIÓN ACUMULADA
+    # -------------------------
 
-        st.subheader(f"🏠 {aloj}")
-
-        block = subdf.copy()
-
-        total_row = {}
-        for col in block.columns:
-            if pd.api.types.is_numeric_dtype(block[col]):
-                total_row[col] = block[col].sum()
-            else:
-                total_row[col] = ""
-
-        total_row["Fecha entrada"] = "TOTAL"
-
-        block = pd.concat([block, pd.DataFrame([total_row])], ignore_index=True)
-
-        st.dataframe(block, use_container_width=True)
-        st.divider()
-
-    excel_file = build_excel(df_final)
-
-    st.download_button(
-        "Descargar Excel",
-        excel_file.getvalue(),
-        file_name="Liquidacion_dinamica.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    evolucion = (
+        df_periodo
+        .groupby("Fecha entrada")["Honorarios Florit"]
+        .sum()
+        .sort_index()
+        .cumsum()
+        .reset_index()
     )
+
+    st.subheader("📈 Evolución acumulada")
+    st.line_chart(
+        evolucion.set_index("Fecha entrada")["Honorarios Florit"]
+    )
+
