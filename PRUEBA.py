@@ -393,6 +393,12 @@ st.title("📊 Liquidaciones dinámicas")
 start_date = st.date_input("Desde", key="desde_global")
 end_date = st.date_input("Hasta", key="hasta_global")
 file_reservas = st.file_uploader("Sube archivo (.xlsx)", type=["xlsx"], key="file_global")
+df_base = None
+
+if file_reservas:
+    df_base = pd.read_excel(file_reservas)
+    df_base = normalize_columns(df_base)
+
 
 st.divider()
 
@@ -452,8 +458,8 @@ with tab1:
             st.error("Sube el archivo de reservas.")
             st.stop()
 
-        df_res = pd.read_excel(file_reservas)
-        df_res = normalize_columns(df_res)
+        df_res = df_base.copy()
+
 
         # 🔥 FILTRAR ANTES DEL CÁLCULO
         df_res = df_res[df_res["Alojamiento"].isin(alojamientos_seleccionados)]
@@ -553,13 +559,11 @@ with tab2:
     # FILTRAR PERIODO
     # -------------------------
 
-    if st.session_state.df_final is None:
-
+    if df_base is None:
         st.info("Sube archivo para ver previsión.")
         st.stop()
 
-    df_periodo = st.session_state.df_final.copy()
-
+    df_periodo = df_base.copy()
 
 
 
@@ -583,6 +587,19 @@ with tab2:
         porcentaje = honorarios_corte / honorarios_periodo * 100
 
     pendiente = honorarios_periodo - honorarios_corte
+    
+    if alojamientos_tab2:
+        df_periodo = df_periodo[
+            df_periodo["Alojamiento"].isin(alojamientos_tab2)
+        ]
+
+    df_periodo = df_periodo[
+        (df_periodo["Fecha entrada"] >= pd.to_datetime(start_date)) &
+        (df_periodo["Fecha entrada"] <= pd.to_datetime(end_date))
+    ]
+
+    df_periodo = process_dynamic(df_periodo, reglas)
+
 
     # -------------------------
     # KPIs SUPERIORES
