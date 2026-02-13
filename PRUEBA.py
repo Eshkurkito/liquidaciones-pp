@@ -192,12 +192,26 @@ def process_dynamic(df, reglas):
     # COMISIÓN PORTAL
     # -------------------------
 
-    df["Comisión portal"] = pd.to_numeric(df["Comisión portal"], errors="coerce").fillna(0)
+    # Asegurar que es numérica
+    df["Comisión portal"] = pd.to_numeric(
+        df["Comisión portal"], errors="coerce"
+    ).fillna(0)
 
-    # La comisión que viene en el Excel ya es la correcta (SIN IVA)
+    # Comisión SIN IVA (tal como viene en el Excel)
     df["Comisión portal sin IVA"] = df["Comisión portal"].copy()
 
-    # No recalculamos IVA comisión porque el Excel ya lo trae separado
+    # Si existe la columna de IVA comisión en el Excel, la usamos
+    if "IVA comisión portal" in df.columns:
+        df["IVA comisión portal"] = pd.to_numeric(
+            df["IVA comisión portal"], errors="coerce"
+        ).fillna(0)
+
+        df["Comisión portal con IVA"] = (
+            df["Comisión portal sin IVA"] + df["IVA comisión portal"]
+        )
+    else:
+        # Si no existe, asumimos que no hay IVA separado
+        df["Comisión portal con IVA"] = df["Comisión portal sin IVA"]
 
 
     # -------------------------
@@ -277,7 +291,7 @@ def process_dynamic(df, reglas):
     # -------------------------
 
     df["Total Gastos"] = (
-        df["Comisión portal"]
+        df["Comisión portal con IVA"]
         + df["Honorarios Florit"]
         + df["Gasto limpieza"]
         + df["Amenities"]
@@ -285,10 +299,6 @@ def process_dynamic(df, reglas):
 
     df["Pago al propietario"] = df["Total ingresos"] - df["Total Gastos"]
     
-    # ---------------------------------
-    # SELF MANAGED (Florit = propietario)
-    # ---------------------------------
-
     # ---------------------------------
     # SELF MANAGED (Florit = propietario)
     # ---------------------------------
