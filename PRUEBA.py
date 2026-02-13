@@ -386,7 +386,34 @@ def build_excel(df):
 
 st.title("📊 Liquidaciones dinámicas")
 tab1, tab2 = st.tabs(["Liquidaciones", "Previsión Tesorería"])
+
+# INPUTS GLOBALES
+start_date = st.date_input("Desde", value=date(date.today().year, date.today().month, 1))
+end_date = st.date_input("Hasta", value=date.today())
+
+file_reservas = st.file_uploader("Sube archivo de reservas (.xlsx)", type=["xlsx"])
+
+reglas = load_reglas()
+
+df_final = None
+
+if file_reservas:
+
+    df_res = pd.read_excel(file_reservas)
+    df_res = normalize_columns(df_res)
+
+    df_res = df_res[
+        (df_res["Fecha entrada"] >= pd.to_datetime(start_date)) &
+        (df_res["Fecha entrada"] <= pd.to_datetime(end_date))
+    ]
+
+    if not df_res.empty:
+        df_final = process_dynamic(df_res, reglas)
+
+
 with tab1:
+    
+    
 
 
     start_date = st.date_input("Desde", value=date(date.today().year, date.today().month, 1))
@@ -522,10 +549,12 @@ with tab2:
     # FILTRAR PERIODO
     # -------------------------
 
-    df_periodo = df_res[
-        (df_res["Fecha entrada"] >= pd.to_datetime(start_date)) &
-        (df_res["Fecha entrada"] <= pd.to_datetime(end_date))
-    ]
+    if df_final is None:
+        st.info("Sube archivo para ver previsión.")
+        st.stop()
+
+    df_periodo = df_final.copy()
+
 
     df_periodo = process_dynamic(df_periodo, reglas)
 
