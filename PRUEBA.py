@@ -210,27 +210,28 @@ def process_dynamic(df, reglas):
     )
 
     # -------------------------
-    # HONORARIOS
+    # HONORARIOS (VERSIÓN RÁPIDA)
     # -------------------------
 
-    def calc_honorarios(row):
+    base = df["Ingreso alojamiento"].copy()
 
-        base = row["Ingreso alojamiento"]
+    # Excluir comisión si aplica
+    mask_exclude = df["hon_base_exclude_commission"] == True
+    base = np.where(mask_exclude, base - df["Comisión portal"], base)
 
-        if row["hon_base_exclude_commission"]:
-            base -= row["Comisión portal"]
+    # Excluir IVA si aplica
+    mask_iva_base = df["compute_iva_alquiler"] == True
+    base = np.where(mask_iva_base, base - df["IVA del alquiler"], base)
 
-        if row["compute_iva_alquiler"]:
-            base -= row["IVA del alquiler"]
+    # Calcular honorarios base
+    df["Honorarios Florit"] = base * df["honorarios_pct"]
 
-        honorarios = base * row["honorarios_pct"]
+    # Aplicar IVA a honorarios si corresponde
+    mask_vat = df["honorarios_apply_vat"] == True
+    df.loc[mask_vat, "Honorarios Florit"] *= (
+        1 + df.loc[mask_vat, "honorarios_vat_pct"] / 100
+    )
 
-        if row["honorarios_apply_vat"]:
-            honorarios *= (1 + row["honorarios_vat_pct"] / 100)
-
-        return honorarios
-
-    df["Honorarios Florit"] = df.apply(calc_honorarios, axis=1)
 
     # -------------------------
     # LIMPIEZA
