@@ -575,7 +575,7 @@ with tab2:
 
         df_periodo = process_dynamic(df_periodo, reglas)
 
-    st.session_state.df_tesoreria = df_periodo
+        st.session_state.df_tesoreria = df_periodo
 
     # 🔹 MOSTRAR SOLO SI YA HAY RESULTADO
     if st.session_state.df_tesoreria is not None:
