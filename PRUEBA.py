@@ -298,10 +298,9 @@ def process_dynamic(df, reglas):
     )
 
     df["Pago al propietario"] = (
-        df["Ingreso alojamiento"]
-        + df["Ingreso limpieza"]
-        - df["Total Gastos"]
+        df["Total ingresos"] - df["Total Gastos"]
     )
+
 
     
     # ---------------------------------
