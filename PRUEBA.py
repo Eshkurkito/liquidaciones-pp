@@ -531,50 +531,48 @@ with tab1:
 with tab2:
 
     st.header("📈 Previsión Tesorería – Honorarios Florit")
-    
-    # 🔹 Filtro independiente para Tab2
+
+    # 🔹 Verificar archivo
+    if df_base is None:
+        st.info("Sube archivo para ver previsión.")
+        st.stop()
+
+    # 🔹 Filtro independiente alojamientos
     alojamientos_tab2 = st.multiselect(
         "Filtrar alojamiento(s)",
         options=reglas["Property"].unique(),
         key="alojamientos_tab2"
     )
 
-
     fecha_corte = st.date_input(
         "Fecha de corte",
         value=end_date,
         key="fecha_corte_tesoreria"
     )
-    
-    df_periodo = st.session_state.df_final.copy()
-    # Aplicar filtro solo si se selecciona algo
+
+    # 🔹 Copiar base
+    df_periodo = df_base.copy()
+
+    # 🔹 Aplicar filtro alojamientos
     if alojamientos_tab2:
         df_periodo = df_periodo[
             df_periodo["Alojamiento"].isin(alojamientos_tab2)
         ]
 
+    # 🔹 Aplicar filtro fechas
+    df_periodo = df_periodo[
+        (df_periodo["Fecha entrada"] >= pd.to_datetime(start_date)) &
+        (df_periodo["Fecha entrada"] <= pd.to_datetime(end_date))
+    ]
 
-
-    # -------------------------
-    # FILTRAR PERIODO
-    # -------------------------
-
-    if df_base is None:
-        st.info("Sube archivo para ver previsión.")
-        st.stop()
-
-    df_periodo = df_base.copy()
-
-
+    # 🔹 Calcular honorarios
+    df_periodo = process_dynamic(df_periodo, reglas)
 
     if df_periodo.empty:
         st.warning("No hay datos para el periodo seleccionado.")
         st.stop()
 
-    # -------------------------
-    # HONORARIOS HASTA CORTE
-    # -------------------------
-
+    # 🔹 Métricas
     df_corte = df_periodo[
         df_periodo["Fecha entrada"] <= pd.to_datetime(fecha_corte)
     ]
@@ -582,28 +580,12 @@ with tab2:
     honorarios_corte = df_corte["Honorarios Florit"].sum()
     honorarios_periodo = df_periodo["Honorarios Florit"].sum()
 
-    porcentaje = 0
-    if honorarios_periodo > 0:
-        porcentaje = honorarios_corte / honorarios_periodo * 100
+    porcentaje = (
+        honorarios_corte / honorarios_periodo * 100
+        if honorarios_periodo > 0 else 0
+    )
 
     pendiente = honorarios_periodo - honorarios_corte
-    
-    if alojamientos_tab2:
-        df_periodo = df_periodo[
-            df_periodo["Alojamiento"].isin(alojamientos_tab2)
-        ]
-
-    df_periodo = df_periodo[
-        (df_periodo["Fecha entrada"] >= pd.to_datetime(start_date)) &
-        (df_periodo["Fecha entrada"] <= pd.to_datetime(end_date))
-    ]
-
-    df_periodo = process_dynamic(df_periodo, reglas)
-
-
-    # -------------------------
-    # KPIs SUPERIORES
-    # -------------------------
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -613,10 +595,6 @@ with tab2:
     col4.metric("🔮 Pendiente periodo", f"{pendiente:,.2f} €")
 
     st.divider()
-
-    # -------------------------
-    # RANKING POR APARTAMENTO
-    # -------------------------
 
     ranking = (
         df_periodo
@@ -628,24 +606,3 @@ with tab2:
 
     st.subheader("🏠 Ranking por apartamento")
     st.dataframe(ranking, use_container_width=True)
-
-    st.divider()
-
-    # -------------------------
-    # EVOLUCIÓN ACUMULADA
-    # -------------------------
-
-    evolucion = (
-        df_periodo
-        .groupby("Fecha entrada")["Honorarios Florit"]
-        .sum()
-        .sort_index()
-        .cumsum()
-        .reset_index()
-    )
-
-    st.subheader("📈 Evolución acumulada")
-    st.line_chart(
-        evolucion.set_index("Fecha entrada")["Honorarios Florit"]
-    )
-
