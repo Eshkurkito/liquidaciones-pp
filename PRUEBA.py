@@ -409,6 +409,10 @@ reglas = load_reglas()
 
 if "df_final" not in st.session_state:
     st.session_state.df_final = None
+    
+if "df_tesoreria" not in st.session_state:
+    st.session_state.df_tesoreria = None
+
 
 st.divider()  # Opcional para separar visualmente
 
