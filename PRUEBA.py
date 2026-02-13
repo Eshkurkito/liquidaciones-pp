@@ -194,29 +194,11 @@ def process_dynamic(df, reglas):
 
     df["Comisión portal"] = pd.to_numeric(df["Comisión portal"], errors="coerce").fillna(0)
 
-    # Guardar comisión original como SIN IVA
+    # La comisión que viene en el Excel ya es la correcta (SIN IVA)
     df["Comisión portal sin IVA"] = df["Comisión portal"].copy()
 
-    # Calcular IVA comisión portal
-    df["IVA comisión portal"] = (
-        df["Comisión portal sin IVA"] * df["commission_vat_pct"] / 100
-    )
+    # No recalculamos IVA comisión porque el Excel ya lo trae separado
 
-    # Crear comisión con IVA
-    df["Comisión portal con IVA"] = (
-        df["Comisión portal sin IVA"] + df["IVA comisión portal"]
-    )
-
-    # Determinar cuál usar como comisión final (para gastos)
-    if "skip_booking_vat" in df.columns:
-        mask_booking = df["Portal"].astype(str).str.lower().str.contains("booking", na=False)
-        df["Comisión portal"] = np.where(
-            mask_booking & (df["skip_booking_vat"] == False),
-            df["Comisión portal con IVA"],
-            df["Comisión portal sin IVA"]
-        )
-    else:
-        df["Comisión portal"] = df["Comisión portal con IVA"]
 
     # -------------------------
     # IVA ALQUILER
