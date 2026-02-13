@@ -54,6 +54,21 @@ def load_reglas():
         .astype(int)
     )
 
+    # Convertir commission_vat_pct a numérico
+    if "commission_vat_pct" in reglas.columns:
+        reglas["commission_vat_pct"] = pd.to_numeric(
+            reglas["commission_vat_pct"], errors="coerce"
+        ).fillna(0)
+
+    # Convertir hon_base_use_commission_without_vat a booleano
+    if "hon_base_use_commission_without_vat" in reglas.columns:
+        reglas["hon_base_use_commission_without_vat"] = (
+            pd.to_numeric(reglas["hon_base_use_commission_without_vat"], errors="coerce")
+            .fillna(0)
+            .astype(int)
+            .map({1: True, 0: False})
+        )
+
 
     return reglas
 
