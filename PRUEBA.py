@@ -386,24 +386,29 @@ def build_excel(df):
 
 st.title("📊 Liquidaciones dinámicas")
 
-# 🔹 INPUTS ARRIBA DEL TODO
-start_date = st.date_input(
-    "Desde",
-    value=date(date.today().year, date.today().month, 1),
-    key="desde_global"
-)
+# INPUTS
+start_date = st.date_input("Desde", key="desde_global")
+end_date = st.date_input("Hasta", key="hasta_global")
+file_reservas = st.file_uploader("Sube archivo (.xlsx)", type=["xlsx"], key="file_global")
 
-end_date = st.date_input(
-    "Hasta",
-    value=date.today(),
-    key="hasta_global"
-)
+reglas = load_reglas()
 
-file_reservas = st.file_uploader(
-    "Sube archivo de reservas (.xlsx)",
-    type=["xlsx"],
-    key="file_global"
-)
+# 👇 MUY IMPORTANTE
+df_final = None
+
+# PROCESAMIENTO
+if file_reservas:
+
+    df_res = pd.read_excel(file_reservas)
+    df_res = normalize_columns(df_res)
+
+    df_res = df_res[
+        (df_res["Fecha entrada"] >= pd.to_datetime(start_date)) &
+        (df_res["Fecha entrada"] <= pd.to_datetime(end_date))
+    ]
+
+    if not df_res.empty:
+        df_final = process_dynamic(df_res, reglas)
 
 st.divider()  # Opcional para separar visualmente
 
