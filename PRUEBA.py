@@ -236,7 +236,7 @@ def process_dynamic(df, reglas):
     # -------------------------
 
     df["Gasto limpieza"] = np.where(
-        df["cleaning_fee"].notna(),
+        df["cleaning_fee"] > 0,
         df["cleaning_fee"],
         df["Ingreso limpieza"]
     )
