@@ -191,27 +191,24 @@ def process_dynamic(df, reglas):
     # -------------------------
     # COMISIÓN PORTAL
     # -------------------------
-
+   
     # Asegurar que es numérica
     df["Comisión portal"] = pd.to_numeric(
         df["Comisión portal"], errors="coerce"
     ).fillna(0)
 
-    # Comisión SIN IVA (tal como viene en el Excel)
+    # Comisión SIN IVA (viene del Excel)
     df["Comisión portal sin IVA"] = df["Comisión portal"].copy()
 
-    # Si existe la columna de IVA comisión en el Excel, la usamos
-    if "IVA comisión portal" in df.columns:
-        df["IVA comisión portal"] = pd.to_numeric(
-            df["IVA comisión portal"], errors="coerce"
-        ).fillna(0)
+    # 🔥 CALCULAR IVA comisión usando commission_vat_pct del CSV
+    df["IVA comisión portal"] = (
+        df["Comisión portal sin IVA"] * df["commission_vat_pct"] / 100
+    )
 
-        df["Comisión portal con IVA"] = (
-            df["Comisión portal sin IVA"] + df["IVA comisión portal"]
-        )
-    else:
-        # Si no existe, asumimos que no hay IVA separado
-        df["Comisión portal con IVA"] = df["Comisión portal sin IVA"]
+    # Comisión CON IVA real
+    df["Comisión portal con IVA"] = (
+        df["Comisión portal sin IVA"] + df["IVA comisión portal"]
+    )
 
 
     # -------------------------
