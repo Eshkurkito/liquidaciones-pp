@@ -297,7 +297,12 @@ def process_dynamic(df, reglas):
         + df["Amenities"]
     )
 
-    df["Pago al propietario"] = df["Total ingresos"] - df["Total Gastos"]
+    df["Pago al propietario"] = (
+        df["Ingreso alojamiento"]
+        + df["Ingreso limpieza"]
+        - df["Total Gastos"]
+    )
+
     
     # ---------------------------------
     # SELF MANAGED (Florit = propietario)
