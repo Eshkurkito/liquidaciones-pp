@@ -571,6 +571,43 @@ with tab2:
     if df_periodo.empty:
         st.warning("No hay datos para el periodo seleccionado.")
         st.stop()
+        
+    # =====================================================
+    # COMPARACIÓN AÑO ACTUAL VS AÑO ANTERIOR (YTD)
+    # =====================================================
+
+    anio_actual = end_date.year
+    anio_anterior = anio_actual - 1
+
+    # Mismo rango de fechas pero año anterior
+    fecha_inicio_anterior = start_date.replace(year=anio_anterior)
+    fecha_fin_anterior = end_date.replace(year=anio_anterior)
+
+    df_anterior = df_base.copy()
+
+    # Aplicar filtro alojamientos
+    if alojamientos_tab2:
+        df_anterior = df_anterior[
+            df_anterior["Alojamiento"].isin(alojamientos_tab2)
+        ]
+
+    # Aplicar rango equivalente año anterior
+    df_anterior = df_anterior[
+        (df_anterior["Fecha entrada"] >= pd.to_datetime(fecha_inicio_anterior)) &
+        (df_anterior["Fecha entrada"] <= pd.to_datetime(fecha_fin_anterior))
+    ]
+
+    df_anterior = process_dynamic(df_anterior, reglas)
+
+    hon_actual = df_periodo["Honorarios Florit"].sum()
+    hon_anterior = df_anterior["Honorarios Florit"].sum()
+
+    variacion = hon_actual - hon_anterior
+    variacion_pct = (
+    variacion / hon_anterior * 100
+    if hon_anterior > 0 else 0
+)
+
 
     # 🔹 Métricas
     df_corte = df_periodo[
@@ -593,6 +630,15 @@ with tab2:
     col2.metric("📅 Total periodo", f"{honorarios_periodo:,.2f} €")
     col3.metric("📊 % ejecutado", f"{porcentaje:,.1f} %")
     col4.metric("🔮 Pendiente periodo", f"{pendiente:,.2f} €")
+    
+    st.divider()
+
+    col5, col6, col7 = st.columns(3)
+
+    col5.metric(f"💶 {anio_actual}", f"{hon_actual:,.2f} €")
+    col6.metric(f"💶 {anio_anterior}", f"{hon_anterior:,.2f} €")
+    col7.metric("📈 Variación %", f"{variacion_pct:,.1f} %")
+
 
     st.divider()
 
