@@ -413,12 +413,6 @@ with tab1:
     # CARGAR REGLAS Y CREAR FILTRO
     # ---------------------------------
 
-    reglas = pd.read_csv(
-        "reglas_apartamentos.csv",
-        sep=",",
-        encoding="utf-8"
-    )
-
 
     alojamientos_gestionados = sorted(reglas["Property"].unique())
 
@@ -527,12 +521,29 @@ with tab1:
 with tab2:
 
     st.header("📈 Previsión Tesorería – Honorarios Florit")
+    
+    # 🔹 Filtro independiente para Tab2
+    alojamientos_tab2 = st.multiselect(
+        "Filtrar alojamiento(s)",
+        options=reglas["Property"].unique(),
+        key="alojamientos_tab2"
+    )
+
 
     fecha_corte = st.date_input(
         "Fecha de corte",
         value=end_date,
         key="fecha_corte_tesoreria"
     )
+    
+    df_periodo = st.session_state.df_final.copy()
+    # Aplicar filtro solo si se selecciona algo
+    if alojamientos_tab2:
+        df_periodo = df_periodo[
+            df_periodo["Alojamiento"].isin(alojamientos_tab2)
+        ]
+
+
 
     # -------------------------
     # FILTRAR PERIODO
@@ -547,7 +558,6 @@ with tab2:
 
 
 
-    df_periodo = process_dynamic(df_periodo, reglas)
 
     if df_periodo.empty:
         st.warning("No hay datos para el periodo seleccionado.")
