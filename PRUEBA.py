@@ -575,7 +575,7 @@ with tab2:
 
         df_periodo = process_dynamic(df_periodo, reglas)
 
-        st.session_state.df_tesoreria = df_periodo
+    st.session_state.df_tesoreria = df_periodo
 
     # 🔹 MOSTRAR SOLO SI YA HAY RESULTADO
     if st.session_state.df_tesoreria is not None:
@@ -590,17 +590,74 @@ with tab2:
 
         honorarios_corte = df_corte["Honorarios Florit"].sum()
         honorarios_periodo = df_periodo["Honorarios Florit"].sum()
+        
+         # =====================================================
+        # COMPARACIÓN YTD VS AÑO ANTERIOR
+        # =====================================================
 
-        porcentaje = (
-            honorarios_corte / honorarios_periodo * 100
-            if honorarios_periodo > 0 else 0
-        )
+    anio_actual = end_date.year
+    anio_anterior = anio_actual - 1
 
-        pendiente = honorarios_periodo - honorarios_corte
+    fecha_inicio_anterior = start_date.replace(year=anio_anterior)
+    fecha_fin_anterior = end_date.replace(year=anio_anterior)
 
-        col1, col2, col3, col4 = st.columns(4)
+    df_anterior = df_base.copy()
 
-        col1.metric("💶 Generado hasta corte", f"{honorarios_corte:,.2f} €")
-        col2.metric("📅 Total periodo", f"{honorarios_periodo:,.2f} €")
-        col3.metric("📊 % ejecutado", f"{porcentaje:,.1f} %")
-        col4.metric("🔮 Pendiente periodo", f"{pendiente:,.2f} €")
+    # Aplicar mismo filtro de alojamientos
+    if st.session_state.alojamientos_tab2:
+        df_anterior = df_anterior[
+            df_anterior["Alojamiento"].isin(st.session_state.alojamientos_tab2)
+        ]
+
+    df_anterior = df_anterior[
+        (df_anterior["Fecha entrada"] >= pd.to_datetime(fecha_inicio_anterior)) &
+        (df_anterior["Fecha entrada"] <= pd.to_datetime(fecha_fin_anterior))
+    ]
+
+    df_anterior = process_dynamic(df_anterior, reglas)
+
+    hon_actual = honorarios_periodo
+    hon_anterior = df_anterior["Honorarios Florit"].sum()
+
+    variacion_pct = (
+        (hon_actual - hon_anterior) / hon_anterior * 100
+        if hon_anterior > 0 else 0
+    )
+
+
+    porcentaje = (
+        honorarios_corte / honorarios_periodo * 100
+        if honorarios_periodo > 0 else 0
+    )
+
+    pendiente = honorarios_periodo - honorarios_corte
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric("💶 Generado hasta corte", f"{honorarios_corte:,.2f} €")
+    col2.metric("📅 Total periodo", f"{honorarios_periodo:,.2f} €")
+    col3.metric("📊 % ejecutado", f"{porcentaje:,.1f} %")
+    col4.metric("🔮 Pendiente periodo", f"{pendiente:,.2f} €")
+    
+    st.divider()
+
+    col5, col6, col7 = st.columns(3)
+
+    col5.metric(f"💶 {anio_actual}", f"{hon_actual:,.2f} €")
+    col6.metric(f"💶 {anio_anterior}", f"{hon_anterior:,.2f} €")
+    col7.metric("📈 Variación %", f"{variacion_pct:,.1f} %")
+    
+    st.divider()
+
+    ranking = (
+        df_periodo
+        .groupby("Alojamiento")["Honorarios Florit"]
+        .sum()
+        .sort_values(ascending=False)
+        .reset_index()
+    )
+
+    st.subheader("🏠 Ranking por apartamento")
+    st.dataframe(ranking, use_container_width=True)
+
+
