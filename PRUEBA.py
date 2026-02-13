@@ -165,19 +165,6 @@ def normalize_columns(df):
 # =====================================================
 
 def process_dynamic(df, reglas):
-    
-    # Asegurar que columnas numéricas no tengan None
-    numeric_cols = [
-        "Ingreso alojamiento",
-        "Ingreso limpieza",
-        "Comisión portal",
-        "Amenities",
-        "Gasto limpieza"
-    ]
-
-    for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
 
     df = df.merge(reglas, left_on="Alojamiento", right_on="Property", how="left")
@@ -278,27 +265,43 @@ def process_dynamic(df, reglas):
     # SELF MANAGED (Florit = propietario)
     # ---------------------------------
 
+    # ---------------------------------
+    # SELF MANAGED (Florit = propietario)
+    # ---------------------------------
+
     if "self_managed" in df.columns:
 
         mask_self = df["self_managed"] == 1
 
-    # Recalcular honorarios como lo que realmente gana el propietario
-    df.loc[mask_self, "Honorarios Florit"] = (
-        df.loc[mask_self, "Total ingresos"]
-        - df.loc[mask_self, "Comisión portal"]
-        - df.loc[mask_self, "Gasto limpieza"]
-        - df.loc[mask_self, "Amenities"]
-    )
+        # Asegurar que todo es numérico
+        cols_needed = [
+            "Total ingresos",
+            "Comisión portal",
+            "Gasto limpieza",
+            "Amenities"
+        ]
 
-    # Ajustar Total Gastos (sin incluir honorarios)
-    df.loc[mask_self, "Total Gastos"] = (
-        df.loc[mask_self, "Comisión portal"]
-        + df.loc[mask_self, "Gasto limpieza"]
-        + df.loc[mask_self, "Amenities"]
-    )
+        for col in cols_needed:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # Hacer que coincidan
-    df.loc[mask_self, "Pago al propietario"] = df.loc[mask_self, "Honorarios Florit"]
+        # Honorarios = beneficio real
+        df.loc[mask_self, "Honorarios Florit"] = (
+            df.loc[mask_self, "Total ingresos"]
+            - df.loc[mask_self, "Comisión portal"]
+            - df.loc[mask_self, "Gasto limpieza"]
+            - df.loc[mask_self, "Amenities"]
+        )
+
+        # Total Gastos = solo gastos reales (sin honorarios)
+        df.loc[mask_self, "Total Gastos"] = (
+            df.loc[mask_self, "Comisión portal"]
+            + df.loc[mask_self, "Gasto limpieza"]
+            + df.loc[mask_self, "Amenities"]
+        )
+
+        # Pago propietario = mismo importe que honorarios
+        df.loc[mask_self, "Pago al propietario"] = df.loc[mask_self, "Honorarios Florit"]
 
     
     df["Pago recibido"] = df["Total ingresos"] - df["Comisión portal"]
