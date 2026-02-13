@@ -257,8 +257,12 @@ def process_dynamic(df, reglas):
 
 
     # Excluir IVA si aplica
-    mask_iva_base = df["compute_iva_alquiler"] == True
+    if "hon_base_exclude_rent_vat" not in df.columns:
+        df["hon_base_exclude_rent_vat"] = False
+
+    mask_iva_base = df["hon_base_exclude_rent_vat"] == True
     base = np.where(mask_iva_base, base - df["IVA del alquiler"], base)
+
 
     # Calcular honorarios base
     df["Honorarios Florit"] = base * df["honorarios_pct"]
