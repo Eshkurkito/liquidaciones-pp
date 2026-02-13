@@ -544,9 +544,26 @@ with tab2:
     # 🔹 FORMULARIO
     with st.form("form_tesoreria"):
 
+        alojamientos_disponibles = sorted(reglas["Property"].unique())
+
+        # Inicializar estado si no existe
+        if "alojamientos_tab2" not in st.session_state:
+            st.session_state.alojamientos_tab2 = alojamientos_disponibles
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.form_submit_button("Seleccionar todos"):
+                st.session_state.alojamientos_tab2 = alojamientos_disponibles
+
+        with col2:
+            if st.form_submit_button("Quitar todos"):
+                st.session_state.alojamientos_tab2 = []
+
         alojamientos_tab2 = st.multiselect(
             "Filtrar alojamiento(s)",
-            options=reglas["Property"].unique(),
+            options=alojamientos_disponibles,
+            default=st.session_state.alojamientos_tab2,
             key="alojamientos_tab2"
         )
 
@@ -557,6 +574,7 @@ with tab2:
         )
 
         calcular_tesoreria = st.form_submit_button("Calcular previsión")
+
 
     # 🔹 SOLO SI SE PULSA BOTÓN
     if calcular_tesoreria:
