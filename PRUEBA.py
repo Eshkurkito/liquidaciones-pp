@@ -318,7 +318,7 @@ def process_dynamic(df, reglas):
         df["Total ingresos"] - df["Total Gastos"]
     )
 
-
+    df["Comisión portal"] = df["Comisión portal con IVA"]
     
     # ---------------------------------
     # SELF MANAGED (Florit = propietario)
