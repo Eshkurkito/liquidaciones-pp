@@ -387,12 +387,16 @@ def build_excel(df):
 st.title("📊 Liquidaciones dinámicas")
 
 # 🔹 TABS DESPUÉS
-tab1, tab2 = st.tabs(["Liquidaciones", "Previsión Tesorería"])
+
 
 # INPUTS
 start_date = st.date_input("Desde", key="desde_global")
 end_date = st.date_input("Hasta", key="hasta_global")
 file_reservas = st.file_uploader("Sube archivo (.xlsx)", type=["xlsx"], key="file_global")
+
+st.divider()
+
+tab1, tab2 = st.tabs(["Liquidaciones", "Previsión Tesorería"])
 
 reglas = load_reglas()
 
