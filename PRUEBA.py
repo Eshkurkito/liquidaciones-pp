@@ -210,7 +210,12 @@ def process_dynamic(df, reglas):
         df["Comisión portal sin IVA"] + df["IVA comisión portal"]
     )
 
+    st.write("DEBUG Comisión SIN IVA:", df["Comisión portal sin IVA"].iloc[0])
+    st.write("DEBUG commission_vat_pct:", df["commission_vat_pct"].iloc[0])
+    st.write("DEBUG IVA comisión:", df["IVA comisión portal"].iloc[0])
+    st.write("DEBUG Comisión CON IVA:", df["Comisión portal con IVA"].iloc[0])
 
+    
     # -------------------------
     # IVA ALQUILER
     # -------------------------
