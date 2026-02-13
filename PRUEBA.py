@@ -549,28 +549,40 @@ with tab2:
         value=end_date,
         key="fecha_corte_tesoreria"
     )
+    
+    calcular_tesoreria = st.button("Calcular previsión")
 
-    # 🔹 Copiar base
-    df_periodo = df_base.copy()
+    if calcular_tesoreria:
 
-    # 🔹 Aplicar filtro alojamientos
-    if alojamientos_tab2:
+        df_periodo = df_base.copy()
+
+        # Aplicar filtro alojamientos
+        if alojamientos_tab2:
+            df_periodo = df_periodo[
+                df_periodo["Alojamiento"].isin(alojamientos_tab2)
+            ]
+
+        # Aplicar filtro fechas
         df_periodo = df_periodo[
-            df_periodo["Alojamiento"].isin(alojamientos_tab2)
+            (df_periodo["Fecha entrada"] >= pd.to_datetime(start_date)) &
+            (df_periodo["Fecha entrada"] <= pd.to_datetime(end_date))
         ]
 
-    # 🔹 Aplicar filtro fechas
-    df_periodo = df_periodo[
-        (df_periodo["Fecha entrada"] >= pd.to_datetime(start_date)) &
-        (df_periodo["Fecha entrada"] <= pd.to_datetime(end_date))
-    ]
+        # Calcular honorarios
+        df_periodo = process_dynamic(df_periodo, reglas)
 
-    # 🔹 Calcular honorarios
-    df_periodo = process_dynamic(df_periodo, reglas)
+        if df_periodo.empty:
+            st.warning("No hay datos para el periodo seleccionado.")
+            st.stop()
 
-    if df_periodo.empty:
-        st.warning("No hay datos para el periodo seleccionado.")
-        st.stop()
+        # Guardamos en session_state para no recalcular
+        st.session_state.df_tesoreria = df_periodo
+        
+    if "df_tesoreria" in st.session_state:
+
+        df_periodo = st.session_state.df_tesoreria
+
+
         
     # =====================================================
     # COMPARACIÓN AÑO ACTUAL VS AÑO ANTERIOR (YTD)
@@ -606,7 +618,7 @@ with tab2:
     variacion_pct = (
     variacion / hon_anterior * 100
     if hon_anterior > 0 else 0
-)
+    )
 
 
     # 🔹 Métricas
