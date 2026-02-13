@@ -396,22 +396,8 @@ file_reservas = st.file_uploader("Sube archivo (.xlsx)", type=["xlsx"], key="fil
 
 reglas = load_reglas()
 
-# 👇 MUY IMPORTANTE
-df_final = None
-
-# PROCESAMIENTO
-if file_reservas:
-
-    df_res = pd.read_excel(file_reservas)
-    df_res = normalize_columns(df_res)
-
-    df_res = df_res[
-        (df_res["Fecha entrada"] >= pd.to_datetime(start_date)) &
-        (df_res["Fecha entrada"] <= pd.to_datetime(end_date))
-    ]
-
-    if not df_res.empty:
-        df_final = process_dynamic(df_res, reglas)
+if "df_final" not in st.session_state:
+    st.session_state.df_final = None
 
 st.divider()  # Opcional para separar visualmente
 
@@ -483,14 +469,15 @@ with tab1:
             st.warning("No hay reservas para los alojamientos seleccionados.")
             st.stop()
 
-        df_final = process_dynamic(df_res, reglas)
+        st.session_state.df_final = process_dynamic(df_res, reglas)
+
     
         # ---------------------------------
         # PISOS SIN LIQUIDACIÓN
         # ---------------------------------
 
         pisos_gestionados = set(reglas["Property"].unique())
-        pisos_con_liquidacion = set(df_final["Alojamiento"].unique())
+        pisos_con_liquidacion = set(st.session_state.df_final["Alojamiento"].unique())
 
         pisos_sin_liquidacion = sorted(pisos_gestionados - pisos_con_liquidacion)
 
@@ -505,7 +492,7 @@ with tab1:
 
         st.success("Liquidación generada correctamente.")
 
-        for aloj, subdf in df_final.groupby("Alojamiento"):
+        for aloj, subdf in st.session_state.df_final.groupby("Alojamiento"):
 
             st.subheader(f"🏠 {aloj}")
 
@@ -525,7 +512,7 @@ with tab1:
             st.dataframe(block, use_container_width=True)
             st.divider()
 
-        excel_file = build_excel(df_final)
+        excel_file = build_excel(st.session_state.df_final)
 
         st.download_button(
             "Descargar Excel",
@@ -551,11 +538,13 @@ with tab2:
     # FILTRAR PERIODO
     # -------------------------
 
-    if df_final is None:
+    if st.session_state.df_final is None:
+
         st.info("Sube archivo para ver previsión.")
         st.stop()
 
-    df_periodo = df_final.copy()
+    df_periodo = st.session_state.df_final.copy()
+
 
 
     df_periodo = process_dynamic(df_periodo, reglas)
