@@ -415,12 +415,6 @@ with tab1:
     
     
 
-
-    start_date = st.date_input("Desde", value=date(date.today().year, date.today().month, 1))
-    end_date = st.date_input("Hasta", value=date.today())
-
-    file_reservas = st.file_uploader("Sube archivo de reservas (.xlsx)", type=["xlsx"])
-
     # ---------------------------------
     # CARGAR REGLAS Y CREAR FILTRO
     # ---------------------------------
