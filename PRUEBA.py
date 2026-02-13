@@ -616,15 +616,15 @@ with tab2:
         anio_actual = end_date.year
         anio_anterior = anio_actual - 1
 
-    fecha_inicio_anterior = st.session_state.desde_global.replace(year=anio_anterior)
-    fecha_fin_anterior = st.session_state.hasta_global.replace(year=anio_anterior)
+        fecha_inicio_anterior = st.session_state.desde_global.replace(year=anio_anterior)
+        fecha_fin_anterior = st.session_state.hasta_global.replace(year=anio_anterior)
 
 
-    df_anterior = df_base.copy()
+        df_anterior = df_base.copy()
 
-    # Aplicar mismo filtro de alojamientos
-    if st.session_state.alojamientos_tab2:
-        df_anterior = df_anterior[
+        # Aplicar mismo filtro de alojamientos
+        if st.session_state.alojamientos_tab2:
+            df_anterior = df_anterior[
             df_anterior["Alojamiento"].isin(st.session_state.alojamientos_tab2)
         ]
 
