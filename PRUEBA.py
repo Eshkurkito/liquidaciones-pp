@@ -30,22 +30,22 @@ def load_reglas():
     reglas["Property"] = reglas["Property"].astype(str).str.strip().str.upper()
 
     bool_cols = [
-        "honorarios_apply_vat",
-        "compute_iva_alquiler",
-        "treat_empty_portal_as_booking",
-        "skip_booking_vat",
-        "hon_base_exclude_commission"
+    "honorarios_apply_vat",
+    "compute_iva_alquiler",
+    "treat_empty_portal_as_booking",
+    "skip_booking_vat",
+    "hon_base_exclude_commission"
     ]
 
     for col in bool_cols:
         if col in reglas.columns:
             reglas[col] = (
-                reglas[col]
-                .astype(str)
-                .str.upper()
-                .map({"TRUE": True, "FALSE": False})
-                .fillna(False)
+                pd.to_numeric(reglas[col], errors="coerce")
+                .fillna(0)
+                .astype(int)
+                .map({1: True, 0: False, 2: False})
             )
+
             
     if "self_managed" in reglas.columns:
         reglas["self_managed"] = (
@@ -378,7 +378,12 @@ file_reservas = st.file_uploader("Sube archivo de reservas (.xlsx)", type=["xlsx
 # CARGAR REGLAS Y CREAR FILTRO
 # ---------------------------------
 
-reglas = load_reglas()
+reglas = pd.read_csv(
+    "reglas_apartamentos.csv",
+    sep=",",
+    encoding="utf-8"
+)
+
 
 alojamientos_gestionados = sorted(reglas["Property"].unique())
 
