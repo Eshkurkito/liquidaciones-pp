@@ -247,7 +247,7 @@ def process_dynamic(df, reglas):
     # Si usa comisión CON IVA
     base = np.where(
     mask_exclude & ~mask_without_vat,
-    base - df["Comisión portal"],
+    base - df["Comisión portal con IVA"],
     base
     )
 
