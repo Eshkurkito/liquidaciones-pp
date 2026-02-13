@@ -165,6 +165,20 @@ def normalize_columns(df):
 # =====================================================
 
 def process_dynamic(df, reglas):
+    
+    # Asegurar que columnas numéricas no tengan None
+    numeric_cols = [
+        "Ingreso alojamiento",
+        "Ingreso limpieza",
+        "Comisión portal",
+        "Amenities",
+        "Gasto limpieza"
+    ]
+
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
 
     df = df.merge(reglas, left_on="Alojamiento", right_on="Property", how="left")
     df = df.loc[:, ~df.columns.duplicated()]
