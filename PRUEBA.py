@@ -269,6 +269,33 @@ def process_dynamic(df, reglas):
     # SELF MANAGED (Florit = propietario)
     # ---------------------------------
 
+    
+    df["Pago recibido"] = df["Total ingresos"] - df["Comisión portal"]
+
+    columnas_finales = [
+        "Alojamiento",
+        "Fecha entrada",
+        "Fecha salida",
+        "Noches ocupadas",
+        "Huéspedes totales",
+        "Ingreso alojamiento",
+        "IVA del alquiler",
+        "Ingreso limpieza",
+        "Total ingresos",
+        "Portal",
+        "Comisión portal",
+        "Honorarios Florit",
+        "Gasto limpieza",
+        "Amenities",
+        "Total Gastos",
+        "Pago al propietario",
+        "Pago recibido"
+    ]
+
+    columnas_existentes = [c for c in columnas_finales if c in df.columns]
+    
+    df = df.sort_values(by=["Alojamiento", "Fecha entrada"])
+    
     if "self_managed" in df.columns:
 
         mask_self = df["self_managed"] == 1
@@ -302,33 +329,6 @@ def process_dynamic(df, reglas):
 
         # Pago propietario = mismo importe que honorarios
         df.loc[mask_self, "Pago al propietario"] = df.loc[mask_self, "Honorarios Florit"]
-
-    
-    df["Pago recibido"] = df["Total ingresos"] - df["Comisión portal"]
-
-    columnas_finales = [
-        "Alojamiento",
-        "Fecha entrada",
-        "Fecha salida",
-        "Noches ocupadas",
-        "Huéspedes totales",
-        "Ingreso alojamiento",
-        "IVA del alquiler",
-        "Ingreso limpieza",
-        "Total ingresos",
-        "Portal",
-        "Comisión portal",
-        "Honorarios Florit",
-        "Gasto limpieza",
-        "Amenities",
-        "Total Gastos",
-        "Pago al propietario",
-        "Pago recibido"
-    ]
-
-    columnas_existentes = [c for c in columnas_finales if c in df.columns]
-    
-    df = df.sort_values(by=["Alojamiento", "Fecha entrada"])
 
     return df[columnas_existentes]
 
