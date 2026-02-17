@@ -574,7 +574,19 @@ with tab1:
             for aloj, sub in df_show.groupby("Alojamiento"):
                 total_hon = sub["Honorarios Florit"].sum() if "Honorarios Florit" in sub.columns else 0.0
                 with st.expander(f"{aloj} — Honorarios: {total_hon:,.2f} €", expanded=False):
-                    st.dataframe(sub.reset_index(drop=True), use_container_width=True)
+                    # Preparar fila TOTAL con sumas para columnas numéricas
+                    sub_display = sub.reset_index(drop=True).copy()
+                    numeric_cols = sub_display.select_dtypes(include=[np.number]).columns.tolist()
+                    totals_row = {c: sub_display[c].sum() for c in numeric_cols}
+                    # Rellenar resto de columnas con cadena vacía y marcar TOTAL en Fecha entrada si existe
+                    for c in sub_display.columns:
+                        if c not in totals_row:
+                            totals_row[c] = ""
+                    if "Fecha entrada" in sub_display.columns:
+                        totals_row["Fecha entrada"] = "TOTAL"
+                    # Añadir fila TOTAL al final
+                    sub_display = pd.concat([sub_display, pd.DataFrame([totals_row])], ignore_index=True)
+                    st.dataframe(sub_display, use_container_width=True)
 # =====================================================
 # TAB 2 → PREVISIÓN TESORERÍA
 # =====================================================
