@@ -60,14 +60,13 @@ def load_reglas():
             reglas["commission_vat_pct"], errors="coerce"
         ).fillna(0)
 
-    # Convertir hon_base_use_commission_without_vat a booleano
-    if "hon_base_use_commission_without_vat" in reglas.columns:
-        reglas["hon_base_use_commission_without_vat"] = (
-            pd.to_numeric(reglas["hon_base_use_commission_without_vat"], errors="coerce")
-            .fillna(0)
-            .astype(int)
-            .map({1: True, 0: False})
-        )
+    # Nuevo: rent_vat_pct (IVA aplicado al alquiler). Si no existe, default 10%
+    if "rent_vat_pct" in reglas.columns:
+        reglas["rent_vat_pct"] = pd.to_numeric(
+            reglas["rent_vat_pct"], errors="coerce"
+        ).fillna(10.0)
+    else:
+        reglas["rent_vat_pct"] = 10.0
 
 
     return reglas
@@ -268,9 +267,13 @@ def process_dynamic(df, reglas):
 
     mask_iva = df["compute_iva_alquiler"] == True
 
+    # Usar rent_vat_pct por fila (1 + pct/100). Evita constante 1.10
+    if "rent_vat_pct" not in df.columns:
+        df["rent_vat_pct"] = 10.0
+
     df.loc[mask_iva, "IVA del alquiler"] = (
         df.loc[mask_iva, "Ingreso alojamiento"]
-        - (df.loc[mask_iva, "Ingreso alojamiento"] / 1.10)
+        - (df.loc[mask_iva, "Ingreso alojamiento"] / (1 + df.loc[mask_iva, "rent_vat_pct"] / 100))
     )
 
     # -------------------------
