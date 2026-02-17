@@ -557,6 +557,24 @@ with tab1:
         if st.session_state.df_final is None or st.session_state.df_final.empty:
             st.warning("No se ha generado ninguna liquidación tras aplicar las reglas. Revisa los alojamientos y el periodo.")
             st.stop()
+
+        # Mostrar tablas por apartamento y botón de descarga
+        df_show = st.session_state.df_final.copy()
+        if not df_show.empty:
+            # Botón descarga Excel
+            bio = build_excel(df_show)
+            st.download_button(
+                "📥 Descargar liquidaciones (Excel)",
+                data=bio,
+                file_name="liquidaciones.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+            # Expanders por apartamento con su tabla
+            for aloj, sub in df_show.groupby("Alojamiento"):
+                total_hon = sub["Honorarios Florit"].sum() if "Honorarios Florit" in sub.columns else 0.0
+                with st.expander(f"{aloj} — Honorarios: {total_hon:,.2f} €", expanded=False):
+                    st.dataframe(sub.reset_index(drop=True), use_container_width=True)
 # =====================================================
 # TAB 2 → PREVISIÓN TESORERÍA
 # =====================================================
