@@ -185,22 +185,27 @@ def process_dynamic(df, reglas):
     df = df.merge(reglas, left_on="Alojamiento", right_on="Property", how="left")
     df = df.loc[:, ~df.columns.duplicated()]
 
-    # -------------------------
-    # PROTECCIONES COLUMNAS NUEVAS
-    # -------------------------
-
-    if "hon_base_use_commission_without_vat" not in df.columns:
-        df["hon_base_use_commission_without_vat"] = False
-
-    if "commission_vat_pct" not in df.columns:
-        df["commission_vat_pct"] = 0
-
+    # Diagnostics: listar alojamientos del Excel vs reglas
+    alojamientos_en_excel = sorted(df["Alojamiento"].dropna().astype(str).unique())
+    reglas_props = sorted(reglas["Property"].dropna().astype(str).unique())
+    unmatched = [a for a in alojamientos_en_excel if a not in reglas_props]
 
     # 🔥 SOLO apartamentos con reglas
     df = df[df["Property"].notna()].copy()
 
     if df.empty:
         st.warning("No hay apartamentos del CSV en el período seleccionado.")
+        if unmatched:
+            st.info(
+                "Alojamientos en reservas no encontrados en reglas: "
+                + ", ".join(unmatched[:50])
+            )
+        else:
+            st.info(
+                "Ningún alojamiento de las reservas coincide con los de reglas. "
+                "Revisa formatos (espacios, mayúsculas, acentos). Ejemplos en reglas: "
+                + ", ".join(reglas_props[:50])
+            )
         st.stop()
 
     # -------------------------
