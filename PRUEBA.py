@@ -191,9 +191,9 @@ def process_dynamic(df, reglas):
     unmatched = [a for a in alojamientos_en_excel if a not in reglas_props]
 
     # 🔥 SOLO apartamentos con reglas
-    df = df[df["Property"].notna()].copy()
+    df_matched = df[df["Property"].notna()].copy()
 
-    if df.empty:
+    if df_matched.empty:
         st.warning("No hay apartamentos del CSV en el período seleccionado.")
         if unmatched:
             st.info(
@@ -206,8 +206,10 @@ def process_dynamic(df, reglas):
                 "Revisa formatos (espacios, mayúsculas, acentos). Ejemplos en reglas: "
                 + ", ".join(reglas_props[:50])
             )
-        st.stop()
+        # Devolver DataFrame vacío para que el llamador lo gestione
+        return pd.DataFrame()
 
+    df = df_matched
     # -------------------------
     # COMISIÓN PORTAL
     # -------------------------
@@ -531,55 +533,9 @@ with tab1:
 
         st.session_state.df_final = process_dynamic(df_res, reglas)
 
-    
-        # ---------------------------------
-        # PISOS SIN LIQUIDACIÓN
-        # ---------------------------------
-
-        pisos_gestionados = set(reglas["Property"].unique())
-        pisos_con_liquidacion = set(st.session_state.df_final["Alojamiento"].unique())
-
-        pisos_sin_liquidacion = sorted(pisos_gestionados - pisos_con_liquidacion)
-
-        if pisos_sin_liquidacion:
-            st.info(
-            f"Pisos sin liquidación en este período: {', '.join(pisos_sin_liquidacion)}"
-        )
-        else:
-        
-            st.success("Todos los pisos gestionados tienen liquidación en este período.")
-
-
-        st.success("Liquidación generada correctamente.")
-
-        for aloj, subdf in st.session_state.df_final.groupby("Alojamiento"):
-
-            st.subheader(f"🏠 {aloj}")
-
-            block = subdf.copy()
-
-            total_row = {}
-            for col in block.columns:
-                if pd.api.types.is_numeric_dtype(block[col]):
-                    total_row[col] = block[col].sum()
-                else:
-                    total_row[col] = ""
-
-            total_row["Fecha entrada"] = "TOTAL"
-
-            block = pd.concat([block, pd.DataFrame([total_row])], ignore_index=True)
-
-            st.dataframe(block, use_container_width=True)
-            st.divider()
-
-        excel_file = build_excel(st.session_state.df_final)
-
-        st.download_button(
-            "Descargar Excel",
-            excel_file.getvalue(),
-            file_name="Liquidacion_dinamica.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        if st.session_state.df_final is None or st.session_state.df_final.empty:
+            st.warning("No se ha generado ninguna liquidación tras aplicar las reglas. Revisa los alojamientos y el periodo.")
+            st.stop()
 # =====================================================
 # TAB 2 → PREVISIÓN TESORERÍA
 # =====================================================
@@ -644,7 +600,10 @@ with tab2:
 
         df_periodo = process_dynamic(df_periodo, reglas)
 
-        st.session_state.df_tesoreria = df_periodo
+        if df_periodo is None or df_periodo.empty:
+            st.warning("No hay datos para la previsión tras aplicar las reglas. Revisa alojamientos y periodo.")
+        else:
+            st.session_state.df_tesoreria = df_periodo
 
     # 🔹 MOSTRAR SOLO SI YA HAY RESULTADO
     if st.session_state.df_tesoreria is not None:
