@@ -225,10 +225,11 @@ def process_dynamic(df, reglas):
         df["Comisión portal sin IVA"] + df["IVA comisión portal"]
     )
 
-    st.write("DEBUG Comisión SIN IVA:", df["Comisión portal sin IVA"].iloc[0])
-    st.write("DEBUG commission_vat_pct:", df["commission_vat_pct"].iloc[0])
-    st.write("DEBUG IVA comisión:", df["IVA comisión portal"].iloc[0])
-    st.write("DEBUG Comisión CON IVA:", df["Comisión portal con IVA"].iloc[0])
+    # -- quitar debug directo --
+    # st.write("DEBUG Comisión SIN IVA:", df["Comisión portal sin IVA"].iloc[0])
+    # st.write("DEBUG commission_vat_pct:", df["commission_vat_pct"].iloc[0])
+    # st.write("DEBUG IVA comisión:", df["IVA comisión portal"].iloc[0])
+    # st.write("DEBUG Comisión CON IVA:", df["Comisión portal con IVA"].iloc[0])
 
     
     # -------------------------
@@ -250,34 +251,25 @@ def process_dynamic(df, reglas):
 
     base = df["Ingreso alojamiento"].copy()
 
-    # Excluir comisión si aplica
+    # Excluir comisión si aplica (usar .loc para preservar índice)
     mask_exclude = df["hon_base_exclude_commission"] == True
     mask_without_vat = df["hon_base_use_commission_without_vat"] == True
 
     # Si usa comisión SIN IVA
-    base = np.where(
-        mask_exclude & mask_without_vat,
-        base - df["Comisión portal sin IVA"],
-        base
-    )
+    mask = mask_exclude & mask_without_vat
+    base.loc[mask] = base.loc[mask] - df.loc[mask, "Comisión portal sin IVA"]
 
     # Si usa comisión CON IVA
-    base = np.where(
-    mask_exclude & ~mask_without_vat,
-    base - df["Comisión portal con IVA"],
-    base
-    )
-
+    mask = mask_exclude & (~mask_without_vat)
+    base.loc[mask] = base.loc[mask] - df.loc[mask, "Comisión portal con IVA"]
 
     # Excluir IVA si aplica
     if "hon_base_exclude_rent_vat" not in df.columns:
         df["hon_base_exclude_rent_vat"] = False
 
     mask_iva_base = df["hon_base_exclude_rent_vat"] == True
-    base = np.where(mask_iva_base, base - df["IVA del alquiler"], base)
+    base.loc[mask_iva_base] = base.loc[mask_iva_base] - df.loc[mask_iva_base, "IVA del alquiler"]
 
-
-    # Calcular honorarios base
     df["Honorarios Florit"] = base * df["honorarios_pct"]
 
     # Aplicar IVA a honorarios si corresponde
