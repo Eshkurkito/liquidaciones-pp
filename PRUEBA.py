@@ -193,6 +193,27 @@ def process_dynamic(df, reglas):
     # 🔥 SOLO apartamentos con reglas
     df_matched = df[df["Property"].notna()].copy()
 
+    # Columnas mínimas que esperan el resto de la app (evita KeyError si no hay filas)
+    columnas_minimas = [
+        "Alojamiento",
+        "Fecha entrada",
+        "Fecha salida",
+        "Noches ocupadas",
+        "Huéspedes totales",
+        "Ingreso alojamiento",
+        "IVA del alquiler",
+        "Ingreso limpieza",
+        "Total ingresos",
+        "Portal",
+        "Comisión portal",
+        "Honorarios Florit",
+        "Gasto limpieza",
+        "Amenities",
+        "Total Gastos",
+        "Pago al propietario",
+        "Pago recibido",
+    ]
+
     if df_matched.empty:
         st.warning("No hay apartamentos del CSV en el período seleccionado.")
         if unmatched:
@@ -206,8 +227,8 @@ def process_dynamic(df, reglas):
                 "Revisa formatos (espacios, mayúsculas, acentos). Ejemplos en reglas: "
                 + ", ".join(reglas_props[:50])
             )
-        # Devolver DataFrame vacío para que el llamador lo gestione
-        return pd.DataFrame()
+        # Devolver DataFrame vacío con columnas mínimas (evita KeyError en sumas/filtrados)
+        return pd.DataFrame(columns=columnas_minimas)
 
     df = df_matched
     # -------------------------
@@ -644,8 +665,14 @@ with tab2:
 
         df_anterior = process_dynamic(df_anterior, reglas)
 
+        # Asegurar que no intentamos sumar una columna inexistente
+        if df_anterior is None or df_anterior.empty or "Honorarios Florit" not in df_anterior.columns:
+            hon_anterior = 0.0
+        else:
+            hon_anterior = df_anterior["Honorarios Florit"].sum()
+
         hon_actual = honorarios_periodo
-        hon_anterior = df_anterior["Honorarios Florit"].sum()
+        hon_anterior = hon_anterior
 
         variacion_pct = (
             (hon_actual - hon_anterior) / hon_anterior * 100
