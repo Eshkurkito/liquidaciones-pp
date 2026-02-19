@@ -76,6 +76,8 @@ def load_reglas():
     if mask_fix.any():
         reglas.loc[mask_fix, "rent_vat_pct"] = 10.0
 
+    st.write("DEBUG REGLAS CSV")
+    st.write(reglas[reglas["Property"] == "ZAPATEROS 10-6"])
 
     return reglas
 
