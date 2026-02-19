@@ -257,6 +257,10 @@ def process_dynamic(df, reglas):
 
     # Comisión SIN IVA (viene del Excel)
     df["Comisión portal sin IVA"] = df["Comisión portal"].copy()
+    
+    st.write("DEBUG VAT CHECK")
+    st.write(df[["Alojamiento", "Portal", "commission_vat_pct"]])
+
 
     # 🔥 CALCULAR IVA comisión usando commission_vat_pct del CSV
     df["IVA comisión portal"] = (
