@@ -822,6 +822,38 @@ with tab2:
         st.dataframe(pivot_mensual.round(2), use_container_width=True)
 
 
+        def build_excel_mensual(pivot_df):
+
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Honorarios Mensuales"
+
+            # Cabeceras
+            for col_idx, col in enumerate(pivot_df.columns.insert(0, "Alojamiento"), 1):
+                ws.cell(row=1, column=col_idx, value=col).font = Font(bold=True)
+
+            # Datos
+            for row_idx, (index, row) in enumerate(pivot_df.iterrows(), 2):
+                ws.cell(row=row_idx, column=1, value=index)
+                for col_idx, value in enumerate(row, 2):
+                    ws.cell(row=row_idx, column=col_idx, value=value)
+
+            bio = BytesIO()
+            wb.save(bio)
+            bio.seek(0)
+            return bio
+
+
+        bio_mensual = build_excel_mensual(pivot_mensual.round(2))
+
+        st.download_button(
+        "📥 Descargar honorarios mensuales (Excel)",
+        data=bio_mensual,
+        file_name="honorarios_mensuales.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        
         st.subheader("🏠 Ranking por apartamento")
         st.dataframe(ranking, use_container_width=True)
 
