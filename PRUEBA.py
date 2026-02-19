@@ -36,7 +36,8 @@ def load_reglas():
     "skip_booking_vat",
     "hon_base_exclude_commission",
     "hon_base_use_commission_without_vat",
-    "hon_base_exclude_rent_vat"
+    "hon_base_exclude_rent_vat",
+    "include_rent_vat_in_expenses"
     ]
 
     for col in bool_cols:
@@ -337,18 +338,24 @@ def process_dynamic(df, reglas):
     # TOTALES
     # -------------------------
 
+    # Incluir IVA del alquiler sólo si la regla marca include_rent_vat_in_expenses == True
+    iva_alq = df.get("IVA del alquiler", 0).fillna(0)
+    iva_flag = df.get("include_rent_vat_in_expenses", False).fillna(0)
+    # asegúrate de que iva_flag sea 0/1
+    if iva_flag.dtype == bool:
+        iva_flag = iva_flag.astype(int)
+    else:
+        iva_flag = pd.to_numeric(iva_flag, errors="coerce").fillna(0).astype(int)
+    
     df["Total Gastos"] = (
         df["Comisión portal con IVA"]
         + df["Honorarios Florit"]
         + df["Gasto limpieza"]
         + df["Amenities"]
+        + (iva_alq * iva_flag)
     )
-
-    df["Pago al propietario"] = (
-        df["Total ingresos"] - df["Total Gastos"]
-    )
-
-    df["Comisión portal"] = df["Comisión portal con IVA"]
+    
+    df["Pago al propietario"] = df["Total ingresos"] - df["Total Gastos"]
     
     # ---------------------------------
     # SELF MANAGED (Florit = propietario)
@@ -499,8 +506,6 @@ if "df_tesoreria" not in st.session_state:
 
 
 st.divider()  # Opcional para separar visualmente
-
-
 
 
 
