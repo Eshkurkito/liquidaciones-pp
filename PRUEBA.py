@@ -221,6 +221,7 @@ def process_dynamic(df, reglas):
         "Pago recibido",
     ]
 
+    
     if df_matched.empty:
         st.warning("No hay apartamentos del CSV en el período seleccionado.")
         if unmatched:
@@ -375,7 +376,7 @@ def process_dynamic(df, reglas):
         "Ingreso limpieza",
         "Total ingresos",
         "Portal",
-        "Comisión portal",
+        "Comisión portal visible",
         "Honorarios Florit",
         "Gasto limpieza",
         "Amenities",
@@ -421,6 +422,13 @@ def process_dynamic(df, reglas):
 
         # Pago propietario = mismo importe que honorarios
         df.loc[mask_self, "Pago al propietario"] = df.loc[mask_self, "Honorarios Florit"]
+        
+        # Mostrar comisión según IVA configurado
+        df["Comisión portal visible"] = np.where(
+            df["commission_vat_pct"] > 0,
+            df["Comisión portal con IVA"],
+            df["Comisión portal sin IVA"]
+)
 
     return df[columnas_existentes]
 
