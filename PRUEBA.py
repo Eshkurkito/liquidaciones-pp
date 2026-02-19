@@ -369,12 +369,36 @@ def process_dynamic(df, reglas):
     else:
         iva_flag = pd.to_numeric(iva_flag, errors="coerce").fillna(0).astype(int)
     
+    # ---------------------------------
+    # IVA BOOKING (según skip_booking_vat)
+    # ---------------------------------
+
+    df["IVA Booking"] = np.where(
+        df["Portal"].str.contains("BOOKING", case=False, na=False),
+        df["Comisión portal sin IVA"] * 0.21,
+        0
+    )
+
+    skip_flag = df.get("skip_booking_vat", False)
+
+    if skip_flag.dtype == bool:
+        skip_flag = skip_flag.astype(int)
+    else:
+        skip_flag = pd.to_numeric(skip_flag, errors="coerce").fillna(0).astype(int)
+
+    # Si skip = 0 → sumar IVA
+    # Si skip = 1 → no sumar
+    booking_vat_final = df["IVA Booking"] * (1 - skip_flag)
+
+    
     df["Total Gastos"] = (
         df["Comisión portal con IVA"]
+        + booking_vat_final
         + df["Honorarios Florit"]
         + df["Gasto limpieza"]
         + df["Amenities"]
         + (iva_alq * iva_flag)
+        
     )
     
     df["Pago al propietario"] = df["Total ingresos"] - df["Total Gastos"]
