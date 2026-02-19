@@ -70,6 +70,11 @@ def load_reglas():
     else:
         reglas["rent_vat_pct"] = 10.0
 
+    # Corregir filas con compute_iva_alquiler True pero rent_vat_pct == 0 → asumir 10%
+    mask_fix = (reglas.get("compute_iva_alquiler", False) == 1) & (reglas["rent_vat_pct"] <= 0)
+    if mask_fix.any():
+        reglas.loc[mask_fix, "rent_vat_pct"] = 10.0
+
 
     return reglas
 
