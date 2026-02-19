@@ -76,9 +76,6 @@ def load_reglas():
     if mask_fix.any():
         reglas.loc[mask_fix, "rent_vat_pct"] = 10.0
 
-    st.write("DEBUG REGLAS CSV")
-    st.write(reglas[reglas["Property"] == "ZAPATEROS 10-6"])
-
     return reglas
 
 
@@ -260,9 +257,6 @@ def process_dynamic(df, reglas):
     # Comisión SIN IVA (viene del Excel)
     df["Comisión portal sin IVA"] = df["Comisión portal"].copy()
     
-    st.write("DEBUG VAT CHECK")
-    st.write(df[["Alojamiento", "Portal", "commission_vat_pct"]])
-
 
     # 🔥 CALCULAR IVA comisión usando commission_vat_pct del CSV
     df["IVA comisión portal"] = (
