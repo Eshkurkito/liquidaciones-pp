@@ -247,6 +247,13 @@ def process_dynamic(df, reglas):
     df["Comisión portal"] = pd.to_numeric(
         df["Comisión portal"], errors="coerce"
     ).fillna(0)
+    
+    mask_muchosol = df["Portal"].str.upper().str.contains("MUCHOSOL", na=False)
+
+    df.loc[mask_muchosol, "Comisión portal"] = (
+        df.loc[mask_muchosol, "Ingreso alojamiento"] * 0.2299
+    )
+
 
     # Comisión SIN IVA (viene del Excel)
     df["Comisión portal sin IVA"] = df["Comisión portal"].copy()
