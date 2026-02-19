@@ -376,7 +376,7 @@ def process_dynamic(df, reglas):
         "Ingreso limpieza",
         "Total ingresos",
         "Portal",
-        "Comisión portal visible",
+        "Comisión portal",
         "Honorarios Florit",
         "Gasto limpieza",
         "Amenities",
