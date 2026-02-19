@@ -34,7 +34,9 @@ def load_reglas():
     "compute_iva_alquiler",
     "treat_empty_portal_as_booking",
     "skip_booking_vat",
-    "hon_base_exclude_commission"
+    "hon_base_exclude_commission",
+    "hon_base_use_commission_without_vat",
+    "hon_base_exclude_rent_vat"
     ]
 
     for col in bool_cols:
