@@ -12,7 +12,7 @@ st.set_page_config(page_title="Liquidaciones dinámicas", page_icon="📊", layo
 # CARGA REGLAS CSV (AUTODETECTA SEPARADOR)
 # =====================================================
 
-@st.cache_data
+#@st.cache_data
 def load_reglas():
     try:
         reglas = pd.read_csv("reglas_apartamentos.csv", sep=None, engine="python")
