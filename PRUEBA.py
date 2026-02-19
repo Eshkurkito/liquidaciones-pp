@@ -804,22 +804,43 @@ with tab2:
         st.divider()
         st.subheader("📅 Honorarios mensuales por apartamento")
 
+        # ---------------------------------
+        # HONORARIOS MENSUALES ORDENADOS
+        # ---------------------------------
+
+        df_periodo["Año"] = df_periodo["Fecha entrada"].dt.year
+        df_periodo["Mes"] = df_periodo["Fecha entrada"].dt.month
+
         tabla_mensual = (
             df_periodo
-            .groupby(["Alojamiento", "Mes_nombre"])["Honorarios Florit"]
+            .groupby(["Alojamiento", "Mes"])["Honorarios Florit"]
             .sum()
             .reset_index()
         )
 
         pivot_mensual = (
-        tabla_mensual
-        .pivot(index="Alojamiento", columns="Mes_nombre", values="Honorarios Florit")
-        .fillna(0)
+            tabla_mensual
+            .pivot(index="Alojamiento", columns="Mes", values="Honorarios Florit")
+            .fillna(0)
         )
+
+        # Orden fijo enero → diciembre
+        orden_meses = list(range(1, 13))
+        pivot_mensual = pivot_mensual.reindex(columns=orden_meses, fill_value=0)
+
+        # Renombrar columnas a nombres de mes
+        nombres_meses = {
+            1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr",
+            5: "May", 6: "Jun", 7: "Jul", 8: "Ago",
+            9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic"
+        }
+
+        pivot_mensual.rename(columns=nombres_meses, inplace=True)
 
         pivot_mensual["TOTAL AÑO"] = pivot_mensual.sum(axis=1)
 
         st.dataframe(pivot_mensual.round(2), use_container_width=True)
+
 
 
         def build_excel_mensual(pivot_df):
