@@ -716,6 +716,11 @@ with tab2:
 
         df_periodo = st.session_state.df_tesoreria
 
+        df_periodo["Año"] = df_periodo["Fecha entrada"].dt.year
+        df_periodo["Mes"] = df_periodo["Fecha entrada"].dt.month
+        df_periodo["Mes_nombre"] = df_periodo["Fecha entrada"].dt.strftime("%b")
+
+
         df_corte = df_periodo[
             df_periodo["Fecha entrada"] <= pd.to_datetime(
                 st.session_state.fecha_corte_tesoreria
@@ -795,6 +800,27 @@ with tab2:
             .sort_values(ascending=False)
             .reset_index()
         )
+
+        st.divider()
+        st.subheader("📅 Honorarios mensuales por apartamento")
+
+        tabla_mensual = (
+            df_periodo
+            .groupby(["Alojamiento", "Mes_nombre"])["Honorarios Florit"]
+            .sum()
+            .reset_index()
+        )
+
+        pivot_mensual = (
+        tabla_mensual
+        .pivot(index="Alojamiento", columns="Mes_nombre", values="Honorarios Florit")
+        .fillna(0)
+        )
+
+        pivot_mensual["TOTAL AÑO"] = pivot_mensual.sum(axis=1)
+
+        st.dataframe(pivot_mensual.round(2), use_container_width=True)
+
 
         st.subheader("🏠 Ranking por apartamento")
         st.dataframe(ranking, use_container_width=True)
