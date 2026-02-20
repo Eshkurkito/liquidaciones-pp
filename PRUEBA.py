@@ -421,7 +421,8 @@ def process_dynamic(df, reglas):
         "Amenities",
         "Total Gastos",
         "Pago al propietario",
-        "Pago recibido"
+        "Pago recibido",
+        "self_managed"
     ]
 
     columnas_existentes = [c for c in columnas_finales if c in df.columns]
