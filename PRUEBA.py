@@ -473,41 +473,58 @@ def process_dynamic(df, reglas):
 def build_excel(df):
 
     wb = Workbook()
-    ws = wb.active
-    ws.title = "Liquidación"
 
-    row_cursor = 1
+    # Separar propios y terceros
+    df_propios = df[df.get("self_managed", 0) == 1]
+    df_terceros = df[df.get("self_managed", 0) != 1]
 
-    for aloj, subdf in df.groupby("Alojamiento"):
+    def escribir_hoja(ws, dataframe):
 
-        # Título apartamento
-        ws.cell(row=row_cursor, column=1, value=aloj).font = Font(bold=True)
-        row_cursor += 1
+        row_cursor = 1
 
-        cols = list(subdf.columns)
+        for aloj, subdf in dataframe.groupby("Alojamiento"):
 
-        # Cabecera
-        for col_idx, col in enumerate(cols, 1):
-            ws.cell(row=row_cursor, column=col_idx, value=col).font = Font(bold=True)
-
-        row_cursor += 1
-
-        # Reservas
-        for _, row in subdf.iterrows():
-            for col_idx, col in enumerate(cols, 1):
-                ws.cell(row=row_cursor, column=col_idx, value=row[col])
+            ws.cell(row=row_cursor, column=1, value=aloj).font = Font(bold=True)
             row_cursor += 1
 
-        # Fila TOTAL
-        for col_idx, col in enumerate(cols, 1):
-            if pd.api.types.is_numeric_dtype(subdf[col]):
-                total_value = subdf[col].sum()
-                ws.cell(row=row_cursor, column=col_idx, value=total_value).font = Font(bold=True)
-            else:
-                if col == "Fecha entrada":
-                    ws.cell(row=row_cursor, column=col_idx, value="TOTAL").font = Font(bold=True)
+            cols = list(subdf.columns)
 
-        row_cursor += 2  # Espacio entre apartamentos
+            # Cabecera
+            for col_idx, col in enumerate(cols, 1):
+                ws.cell(row=row_cursor, column=col_idx, value=col).font = Font(bold=True)
+
+            row_cursor += 1
+
+            # Reservas
+            for _, row in subdf.iterrows():
+                for col_idx, col in enumerate(cols, 1):
+                    ws.cell(row=row_cursor, column=col_idx, value=row[col])
+                row_cursor += 1
+
+            # Fila TOTAL
+            for col_idx, col in enumerate(cols, 1):
+                if pd.api.types.is_numeric_dtype(subdf[col]):
+                    total_value = subdf[col].sum()
+                    ws.cell(row=row_cursor, column=col_idx, value=total_value).font = Font(bold=True)
+                else:
+                    if col == "Fecha entrada":
+                        ws.cell(row=row_cursor, column=col_idx, value="TOTAL").font = Font(bold=True)
+
+            row_cursor += 2
+
+    # Hoja Propios
+    if not df_propios.empty:
+        ws1 = wb.active
+        ws1.title = "Propios"
+        escribir_hoja(ws1, df_propios)
+    else:
+        ws1 = wb.active
+        ws1.title = "Propios"
+
+    # Hoja Terceros
+    if not df_terceros.empty:
+        ws2 = wb.create_sheet(title="Terceros")
+        escribir_hoja(ws2, df_terceros)
 
     bio = BytesIO()
     wb.save(bio)
