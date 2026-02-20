@@ -805,59 +805,150 @@ with tab2:
         st.subheader("📅 Honorarios mensuales por apartamento")
 
         # ---------------------------------
-        # HONORARIOS MENSUALES ORDENADOS
+        # HONORARIOS MENSUALES SEPARADOS
         # ---------------------------------
 
         df_periodo["Año"] = df_periodo["Fecha entrada"].dt.year
         df_periodo["Mes"] = df_periodo["Fecha entrada"].dt.month
 
-        tabla_mensual = (
-            df_periodo
-            .groupby(["Alojamiento", "Mes"])["Honorarios Florit"]
+        # Separar propios y terceros
+        df_propios = df_periodo[df_periodo["self_managed"] == 1]
+        df_terceros = df_periodo[df_periodo["self_managed"] != 1]
+
+        def construir_tabla_mensual(df_input):
+
+            if df_input.empty:
+                return pd.DataFrame()
+
+            tabla = (
+                df_input
+                .groupby(["Alojamiento", "Mes"])["Honorarios Florit"]
+                .sum()
+                .reset_index()
+            )
+
+            pivot = (
+                tabla
+                .pivot(index="Alojamiento", columns="Mes", values="Honorarios Florit")
+                .fillna(0)
+            )
+
+            # Orden enero → diciembre
+            orden_meses = list(range(1, 13))
+            pivot = pivot.reindex(columns=orden_meses, fill_value=0)
+
+            nombres_meses = {
+                1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr",
+                5: "May", 6: "Jun", 7: "Jul", 8: "Ago",
+                9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic"
+            }
+
+            pivot.rename(columns=nombres_meses, inplace=True)
+            pivot["TOTAL AÑO"] = pivot.sum(axis=1)
+
+            return pivot.round(2)
+
+        pivot_propios = construir_tabla_mensual(df_propios)
+        pivot_terceros = construir_tabla_mensual(df_terceros)
+        
+        # =====================================================
+        # KPI MIX NEGOCIO
+        # =====================================================
+
+        total_propios = df_propios["Honorarios Florit"].sum()
+        total_terceros = df_terceros["Honorarios Florit"].sum()
+        total_global = total_propios + total_terceros
+
+        mix_propios = (total_propios / total_global * 100) if total_global > 0 else 0
+        mix_terceros = (total_terceros / total_global * 100) if total_global > 0 else 0
+
+        st.divider()
+        st.subheader("📊 Mix de negocio")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        col1.metric("🏠 Total Propios", f"{total_propios:,.2f} €")
+        col2.metric("🤝 Total Terceros", f"{total_terceros:,.2f} €")
+        col3.metric("📊 % Propios", f"{mix_propios:,.1f} %")
+        col4.metric("📊 % Terceros", f"{mix_terceros:,.1f} %")
+        
+        # =====================================================
+        # GRÁFICO COMPARATIVO MENSUAL
+        # =====================================================
+
+        import plotly.express as px
+
+        # Agrupar por mes
+        mensual_propios = (
+            df_propios.groupby("Mes")["Honorarios Florit"]
             .sum()
-            .reset_index()
+            .reindex(range(1,13), fill_value=0)
         )
 
-        pivot_mensual = (
-            tabla_mensual
-            .pivot(index="Alojamiento", columns="Mes", values="Honorarios Florit")
-            .fillna(0)
+        mensual_terceros = (
+            df_terceros.groupby("Mes")["Honorarios Florit"]
+            .sum()
+            .reindex(range(1,13), fill_value=0)
         )
 
-        # Orden fijo enero → diciembre
-        orden_meses = list(range(1, 13))
-        pivot_mensual = pivot_mensual.reindex(columns=orden_meses, fill_value=0)
+        df_grafico = pd.DataFrame({
+            "Mes": range(1,13),
+            "Propios": mensual_propios.values,
+            "Terceros": mensual_terceros.values
+        })
 
-        # Renombrar columnas a nombres de mes
         nombres_meses = {
-            1: "Ene", 2: "Feb", 3: "Mar", 4: "Abr",
-            5: "May", 6: "Jun", 7: "Jul", 8: "Ago",
-            9: "Sep", 10: "Oct", 11: "Nov", 12: "Dic"
+            1:"Ene",2:"Feb",3:"Mar",4:"Abr",5:"May",6:"Jun",
+            7:"Jul",8:"Ago",9:"Sep",10:"Oct",11:"Nov",12:"Dic"
         }
 
-        pivot_mensual.rename(columns=nombres_meses, inplace=True)
+        df_grafico["Mes"] = df_grafico["Mes"].map(nombres_meses)
 
-        pivot_mensual["TOTAL AÑO"] = pivot_mensual.sum(axis=1)
+        fig = px.bar(
+            df_grafico,
+            x="Mes",
+            y=["Propios","Terceros"],
+            barmode="group",
+            title="Comparativa mensual Honorarios"
+        )
 
-        st.dataframe(pivot_mensual.round(2), use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
+        # Mostrar tablas
+        if not pivot_propios.empty:
+            st.subheader("🏠 Alojamientos propios")
+            st.dataframe(pivot_propios, use_container_width=True)
 
+        if not pivot_terceros.empty:
+            st.subheader("🤝 Alojamientos de terceros")
+            st.dataframe(pivot_terceros, use_container_width=True)
 
-        def build_excel_mensual(pivot_df):
+        def build_excel_mensual(propios_df, terceros_df):
 
             wb = Workbook()
-            ws = wb.active
-            ws.title = "Honorarios Mensuales"
 
-            # Cabeceras
-            for col_idx, col in enumerate(pivot_df.columns.insert(0, "Alojamiento"), 1):
-                ws.cell(row=1, column=col_idx, value=col).font = Font(bold=True)
+            if not propios_df.empty:
+                ws1 = wb.active
+                ws1.title = "Propios"
 
-            # Datos
-            for row_idx, (index, row) in enumerate(pivot_df.iterrows(), 2):
-                ws.cell(row=row_idx, column=1, value=index)
-                for col_idx, value in enumerate(row, 2):
-                    ws.cell(row=row_idx, column=col_idx, value=value)
+                for col_idx, col in enumerate(propios_df.columns.insert(0, "Alojamiento"), 1):
+                    ws1.cell(row=1, column=col_idx, value=col).font = Font(bold=True)
+
+                for row_idx, (index, row) in enumerate(propios_df.iterrows(), 2):
+                    ws1.cell(row=row_idx, column=1, value=index)
+                    for col_idx, value in enumerate(row, 2):
+                        ws1.cell(row=row_idx, column=col_idx, value=value)
+
+            if not terceros_df.empty:
+                ws2 = wb.create_sheet(title="Terceros")
+
+                for col_idx, col in enumerate(terceros_df.columns.insert(0, "Alojamiento"), 1):
+                    ws2.cell(row=1, column=col_idx, value=col).font = Font(bold=True)
+
+                for row_idx, (index, row) in enumerate(terceros_df.iterrows(), 2):
+                    ws2.cell(row=row_idx, column=1, value=index)
+                    for col_idx, value in enumerate(row, 2):
+                        ws2.cell(row=row_idx, column=col_idx, value=value)
 
             bio = BytesIO()
             wb.save(bio)
@@ -865,16 +956,14 @@ with tab2:
             return bio
 
 
-        bio_mensual = build_excel_mensual(pivot_mensual.round(2))
+        bio_mensual = build_excel_mensual(pivot_propios, pivot_terceros)
 
         st.download_button(
-        "📥 Descargar honorarios mensuales (Excel)",
-        data=bio_mensual,
-        file_name="honorarios_mensuales.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "📥 Descargar honorarios mensuales (Excel)",
+            data=bio_mensual,
+            file_name="honorarios_mensuales.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
-        
         st.subheader("🏠 Ranking por apartamento")
         st.dataframe(ranking, use_container_width=True)
 
