@@ -462,7 +462,7 @@ def process_dynamic(df, reglas):
         # Pago propietario = mismo importe que honorarios
         df.loc[mask_self, "Pago al propietario"] = df.loc[mask_self, "Honorarios Florit"]
         
-    return df[columnas_existentes]
+    return df
 
 
 # =====================================================
@@ -473,7 +473,6 @@ def build_excel(df):
 
     wb = Workbook()
 
-    # Separar propios y terceros
     # Separar propios y terceros
     if "self_managed" in df.columns:
         df_propios = df[df["self_managed"] == 1]
