@@ -474,8 +474,13 @@ def build_excel(df):
     wb = Workbook()
 
     # Separar propios y terceros
-    df_propios = df[df.get("self_managed", 0) == 1]
-    df_terceros = df[df.get("self_managed", 0) != 1]
+    # Separar propios y terceros
+    if "self_managed" in df.columns:
+        df_propios = df[df["self_managed"] == 1]
+        df_terceros = df[df["self_managed"] != 1]
+    else:
+        df_propios = pd.DataFrame()
+        df_terceros = df.copy()
 
     def escribir_hoja(ws, dataframe):
 
