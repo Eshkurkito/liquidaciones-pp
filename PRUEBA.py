@@ -422,7 +422,6 @@ def process_dynamic(df, reglas):
         "Total Gastos",
         "Pago al propietario",
         "Pago recibido",
-        "self_managed"
     ]
 
     columnas_existentes = [c for c in columnas_finales if c in df.columns]
@@ -496,11 +495,38 @@ def build_excel(df):
             row_cursor += 1
 
             # Reservas
+            
             for _, row in subdf.iterrows():
                 for col_idx, col in enumerate(cols, 1):
-                    ws.cell(row=row_cursor, column=col_idx, value=row[col])
-                row_cursor += 1
 
+                    value = row[col]
+                    cell = ws.cell(row=row_cursor, column=col_idx)
+
+                     # Fechas sin hora
+                    if isinstance(value, pd.Timestamp):
+                        cell.value = value.date()
+
+                    # Formato moneda
+                    elif isinstance(value, (int, float)) and col in [
+                        "Ingreso alojamiento",
+                        "IVA del alquiler",
+                        "Ingreso limpieza",
+                        "Total ingresos",
+                        "Comisión portal visible",
+                        "Honorarios Florit",
+                        "Gasto limpieza",
+                        "Amenities",
+                        "Total Gastos",
+                        "Pago al propietario",
+                        "Pago recibido"
+                    ]:
+                        cell.value = value
+                        cell.number_format = '#,##0.00 €'
+
+                    else:
+                        cell.value = value
+
+                row_cursor += 1
             # Fila TOTAL
             for col_idx, col in enumerate(cols, 1):
                 if pd.api.types.is_numeric_dtype(subdf[col]):
@@ -649,6 +675,43 @@ with tab1:
                 with st.expander(f"{aloj} — Honorarios: {total_hon:,.2f} €", expanded=False):
                     # Preparar fila TOTAL con sumas para columnas numéricas
                     sub_display = sub.reset_index(drop=True).copy()
+                    
+                    # ---------------------------------
+                    # FORMATO VISUAL
+                    # ---------------------------------
+
+                    # Quitar hora en fechas
+                    if "Fecha entrada" in sub_display.columns:
+                        sub_display["Fecha entrada"] = pd.to_datetime(
+                             sub_display["Fecha entrada"]
+                        ).dt.date
+
+                    if "Fecha salida" in sub_display.columns:
+                        sub_display["Fecha salida"] = pd.to_datetime(
+                            sub_display["Fecha salida"]
+                        ).dt.date
+
+                    # Columnas formato €
+                    columnas_euro = [
+                        "Ingreso alojamiento",
+                        "IVA del alquiler",
+                        "Ingreso limpieza",
+                        "Total ingresos",
+                        "Comisión portal visible",
+                        "Honorarios Florit",
+                        "Gasto limpieza",
+                        "Amenities",
+                        "Total Gastos",
+                        "Pago al propietario",
+                        "Pago recibido"
+                    ]
+
+                    formato = {
+                        col: "{:,.2f} €"
+                        for col in columnas_euro
+                        if col in sub_display.columns
+                    }
+                    
                     numeric_cols = sub_display.select_dtypes(include=[np.number]).columns.tolist()
                     totals_row = {c: sub_display[c].sum() for c in numeric_cols}
                     # Rellenar resto de columnas con cadena vacía y marcar TOTAL en Fecha entrada si existe
@@ -659,7 +722,10 @@ with tab1:
                         totals_row["Fecha entrada"] = "TOTAL"
                     # Añadir fila TOTAL al final
                     sub_display = pd.concat([sub_display, pd.DataFrame([totals_row])], ignore_index=True)
-                    st.dataframe(sub_display, use_container_width=True)
+                    st.dataframe(
+                        sub_display.style.format(formato),
+                        use_container_width=True
+                )
 # =====================================================
 # TAB 2 → PREVISIÓN TESORERÍA
 # =====================================================
