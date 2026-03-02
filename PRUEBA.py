@@ -428,8 +428,6 @@ def process_dynamic(df, reglas):
     
     df = df.sort_values(by=["Alojamiento", "Fecha entrada"])
     
-    df = df.reindex(columns=columnas_finales)
-    
     if "self_managed" in df.columns:
 
         mask_self = df["self_managed"] == 1
@@ -463,6 +461,8 @@ def process_dynamic(df, reglas):
 
         # Pago propietario = mismo importe que honorarios
         df.loc[mask_self, "Pago al propietario"] = df.loc[mask_self, "Honorarios Florit"]
+        
+    df = df.reindex(columns=columnas_finales)
         
     return df
 
