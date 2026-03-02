@@ -428,6 +428,8 @@ def process_dynamic(df, reglas):
     
     df = df.sort_values(by=["Alojamiento", "Fecha entrada"])
     
+    df = df.reindex(columns=columnas_finales)
+    
     if "self_managed" in df.columns:
 
         mask_self = df["self_managed"] == 1
